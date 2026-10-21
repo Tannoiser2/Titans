@@ -76,7 +76,7 @@ func _ready() -> void:
 	logo.size = Vector2(1920, 170)
 	logo.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	page.add_child(logo)
-	var tag := UI.label("Eserciti e Titani si contendono l'Europa · alba del XVII secolo · da 2 a 4 Nazioni", 28, Color("#e8d6ae"), UI.font_italic)
+	var tag := UI.label("Eserciti e Titani si contendono l'Europa · alba del XVII secolo · da 2 a 5 Nazioni", 28, Color("#e8d6ae"), UI.font_italic)
 	tag.add_theme_color_override("font_outline_color", Color(0, 0, 0, 0.9))
 	tag.add_theme_constant_override("outline_size", 6)
 	tag.position = Vector2(0, 168)
@@ -94,7 +94,7 @@ func _ready() -> void:
 	lv.add_theme_constant_override("separation", 10)
 	left.add_child(lv)
 	lv.add_child(UI.heading("Giocatori e scenario", 30))
-	lv.add_child(_segmented("Nazioni", ["2", "3", "4"], nplayers - 2, func(k):
+	lv.add_child(_segmented("Nazioni", ["2", "3", "4", "5"], nplayers - 2, func(k):
 		nplayers = k + 2
 		var l := D.scenarios_for(nplayers)
 		scen_id = l[0]["id"]
@@ -192,7 +192,7 @@ func _refresh_scen() -> void:
 		var nn := []
 		for c in s["nations"]:
 			nn.append(D.NATIONS[D.CODE_TO_NATION[c]]["short"])
-		b.text = "  %s   %s · lato %s · %d regioni inattive" % [sid, " · ".join(nn), s["side"], (s["inactive"] as Array).size()]
+		b.text = "  %s   %s · lato %s · %d regioni inattive%s" % [sid, " · ".join(nn), s["side"], (s["inactive"] as Array).size(), "  · 5ª Nazione" if s.has("expansion") else ""]
 		b.add_theme_font_size_override("font_size", 20)
 		var on: bool = sid == scen_id
 		b.add_theme_stylebox_override("normal", UI.panel_style(UI.GOLD_D if on else Color("#1d1f24"), UI.GOLD_L if on else Color("#3a3833"), 2, 5))
@@ -215,7 +215,7 @@ func _refresh_seats() -> void:
 		var hb := HBoxContainer.new()
 		hb.add_theme_constant_override("separation", 10)
 		row.add_child(hb)
-		hb.add_child(UI.icon_rect(UI.banner(nt), Vector2(40, 80)))
+		hb.add_child(UI.icon_rect(UI.banner(nt), Vector2(32, 64)))
 		var vb := VBoxContainer.new()
 		vb.custom_minimum_size.x = 300
 		var nl := UI.label(D.NATIONS[nt]["name"], 22, Color.WHITE, UI.font_head_b)

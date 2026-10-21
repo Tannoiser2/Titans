@@ -69,9 +69,21 @@ const NATIONS := {
 			{"cost": 6, "key": "titan_in", "text": "Prima della Battaglia: muovi il Titano da una Regione adiacente nella Battaglia."},
 		],
 	},
+	"sri": {
+		"name": "Sacro Romano Impero", "short": "Impero", "code": "H",
+		"color": Color("#4a4b52"), "light": Color("#e2bd4f"), "dark": Color("#17171b"),
+		"spirit": "Lo Spirito Tedesco", "titan": "il Guerriero della foresta",
+		"nation_ab": "Se nella tua Armata ci sono esattamente 2 o 3 Unità: +1 Dado Fanteria.",
+		"titan_ab": "Scarta 1 Carta Supporto e prendi 1 delle 4 Carte Supporto scoperte.",
+		"adv": [
+			{"cost": 6, "key": "die_k", "text": "Fase Battaglia: aggiungi 1 Dado Cavalleria (Titano in Battaglia)."},
+			{"cost": 7, "key": "titan_inf", "text": "Fase A: aggiungi 1 Fanteria nella Regione del Titano."},
+		],
+		"expansion": true,
+	},
 }
-const NATION_ORDER := ["pol", "rus", "sve", "ott"]
-const CODE_TO_NATION := {"R": "pol", "Y": "rus", "B": "sve", "G": "ott"}
+const NATION_ORDER := ["pol", "rus", "sve", "ott", "sri"]
+const CODE_TO_NATION := {"R": "pol", "Y": "rus", "B": "sve", "G": "ott", "H": "sri"}
 
 # ---------------------------------------------------------------- carte Ordini
 ## Azioni: mF/mK/mA/mT muovi quell'unità, mX muovi un'unità qualsiasi, army muovi da 1 a 4 unità,
@@ -97,6 +109,10 @@ const ORDERS := [
 	{"a": ["army"], "min": 3},
 	{"a": ["mF", "mT", "dK"], "min": 3},
 	{"a": ["mK", "mA", "dF"], "min": 4},
+	{"a": ["army"], "min": 5},
+	{"a": ["mA", "mT", "dF"], "min": 5},
+	{"a": ["buy1", "mF"], "min": 5},
+	{"a": ["mF", "mK", "dX"], "min": 5},
 ]
 
 const ADV_ORDERS := [
@@ -116,6 +132,10 @@ const ADV_ORDERS := [
 	{"a": ["buy", "mT", "dF"], "min": 3},
 	{"a": ["mF", "mT", "dK"], "min": 3},
 	{"a": ["army"], "min": 4},
+	{"a": ["mF", "mK", "dA"], "min": 5},
+	{"a": ["army"], "min": 5},
+	{"a": ["mA", "mT", "dF"], "min": 5},
+	{"a": ["buy", "mF", "mK"], "min": 5},
 ]
 
 const ACTION_NAME := {
@@ -209,6 +229,18 @@ const NATION_CARDS := {
 		{"cost": 1, "when": "vinta", "req": ["own_K"], "eff": "vp", "freq": "battaglia"},
 		{"cost": 1, "when": "prima", "req": ["att", "foe_2"], "eff": "foe_move_out", "freq": "round"},
 	],
+	"sri": [
+		{"cost": 1, "when": "battaglia", "req": ["own_F", "foe_A"], "eff": "die_F", "freq": "battaglia"},
+		{"cost": 0, "when": "battaglia", "req": ["own_F", "foe_K"], "eff": "die_K", "freq": "round"},
+		{"cost": 2, "when": "battaglia", "req": ["own_K", "foe_F"], "eff": "str_2", "freq": "round"},
+		{"cost": 1, "when": "vinta", "req": ["own_A"], "eff": "vp", "freq": "battaglia"},
+		{"cost": 3, "when": "battaglia", "req": ["fewer"], "eff": "die_T", "freq": "round"},
+		{"cost": 0, "when": "battaglia", "req": [], "eff": "reroll2", "freq": "battaglia"},
+		{"cost": 2, "when": "battaglia", "req": ["own_F", "foe_F"], "eff": "die_A", "freq": "round"},
+		{"cost": 2, "when": "battaglia", "req": ["own_A", "foe_A"], "eff": "die_T", "freq": "round"},
+		{"cost": 3, "when": "battaglia", "req": ["own_K"], "eff": "str_1", "freq": "battaglia"},
+		{"cost": 1, "when": "battaglia", "req": ["more"], "eff": "die_F", "freq": "battaglia"},
+	],
 }
 
 const WHEN_TEXT := {
@@ -222,6 +254,7 @@ const REQ_TEXT := {
 	"own_2K": "hai almeno 2 Cavallerie", "only_A": "la tua Armata è di sole Artiglierie", "att": "sei l'Attaccante",
 	"def": "sei il Difensore", "fewer": "la tua Armata ha meno Unità di quella avversaria",
 	"foe_2": "l'avversario ha almeno 2 Unità",
+	"more": "la tua Armata ha più Unità di quella avversaria",
 }
 const EFF_TEXT := {
 	"die_F": "Lancia 1 Dado Fanteria", "die_K": "Lancia 1 Dado Cavalleria", "die_A": "Lancia 1 Dado Artiglieria",
@@ -233,6 +266,7 @@ const EFF_TEXT := {
 	"foe_move_out": "L'avversario sposta 1 sua Unità fuori dalla Battaglia, in una Regione che controlla",
 	"deploy_F": "Schiera 1 Fanteria in una Regione controllata", "move_F": "Muovi 1 Fanteria in una Regione adiacente che controlli",
 	"win_str": "Se hai vinto, la tua Forza aumenta di 1",
+	"reroll2": "Scarta 1 Carta Supporto per ritirare i Dadi della tua Riserva, due volte",
 }
 const FREQ_TEXT := {"round": "Una volta per Round", "battaglia": "Una volta per Battaglia", "turno": "Una volta per turno"}
 
@@ -316,9 +350,11 @@ static func scenarios() -> Array:
 	return _scen
 
 
-static func scenarios_for(n: int) -> Array:
+static func scenarios_for(n: int, with_exp := true) -> Array:
 	var out := []
 	for s in scenarios():
+		if not with_exp and s.has("expansion"):
+			continue
 		if (s["nations"] as Array).size() == n:
 			out.append(s)
 	return out

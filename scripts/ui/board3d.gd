@@ -179,7 +179,7 @@ void fragment() {
 
 func _load_models() -> void:
 	var files := {"F": "fanteria", "K": "cavalleria", "A": "artiglieria", "C": "capitale",
-		"T_pol": "titano_pol", "T_rus": "titano_rus", "T_sve": "titano_sve", "T_ott": "titano_ott"}
+		"T_pol": "titano_pol", "T_rus": "titano_rus", "T_sve": "titano_sve", "T_ott": "titano_ott", "T_sri": "titano_sri"}
 	for k in files:
 		var ps: PackedScene = load("res://assets/modelli/%s.glb" % files[k])
 		if ps == null:

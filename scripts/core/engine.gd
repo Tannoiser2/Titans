@@ -819,6 +819,9 @@ func _do_actions(s: int) -> void:
 		for a in actions_left:
 			var ok := action_possible(s, a)
 			opts.append({"label": D.ACTION_NAME[a] + ("" if ok else " (non possibile)"), "action": a, "ok": ok})
+		var tr := titan_region(s)
+		if tr > 0 and can_adv(s, "titan_inf") and reserve[s]["F"] > 0:
+			opts.append({"label": "Abilità Avanzata (7 Energia): +1 Fanteria nella Regione del Titano", "action": "_titan_inf", "ok": true})
 		opts.append({"label": "Fine delle azioni", "action": ""})
 		var k := await pick(s, "action", "Ordini: scegli un'azione (in qualsiasi ordine)", opts, {"order": cur_order})
 		var a: String = opts[k]["action"]
@@ -826,11 +829,27 @@ func _do_actions(s: int) -> void:
 			break
 		if not opts[k]["ok"]:
 			continue
+		if a == "_titan_inf":
+			_pay_adv(s, "titan_inf")
+			var rr := titan_region(s)
+			reserve[s]["F"] -= 1
+			_put(rr, s, "F")
+			log_msg("%s schiera 1 Fanteria in %s accanto al Titano." % [pname(s), rname(rr)])
+			_fx("deploy", {"seat": s, "t": "F", "r": rr})
+			changed.emit()
+			continue
 		var done := await _do_action(s, a)
 		if done:
 			actions_left.erase(a)
 			actions_used += 1
 		changed.emit()
+
+
+func titan_region(s: int) -> int:
+	for r in regions:
+		if reg[r]["own"] == s and reg[r]["n"]["T"] > 0:
+			return r
+	return -1
 
 
 func action_possible(s: int, a: String) -> bool:
@@ -1341,6 +1360,8 @@ func _apply_nation_ability(s: int) -> void:
 			ok = army_count(s, "F") >= 2 and can_roll(s, "K")
 		"ott":
 			ok = army_count(s, "F") > 0 and army_count(s, "A") > 0
+		"sri":
+			ok = army_size(s) in [2, 3] and can_roll(s, "F")
 	if not ok:
 		return
 	battle["nab"][s] = true
@@ -1348,7 +1369,7 @@ func _apply_nation_ability(s: int) -> void:
 		"pol", "ott":
 			battle["bonus"][s] += 1
 			log_msg("Abilità della Nazione di %s: +1 Forza." % pname(s))
-		"rus":
+		"rus", "sri":
 			_roll_die(s, "F")
 			log_msg("Abilità della Nazione di %s: +1 Dado Fanteria." % pname(s))
 		"sve":
@@ -1376,6 +1397,7 @@ func req_ok(s: int, req: Array) -> bool:
 			"def": if s != battle["def"]: return false
 			"fewer": if army_size(s) >= army_size(o): return false
 			"foe_2": if army_size(o) < 2: return false
+			"more": if army_size(s) <= army_size(o): return false
 	return true
 
 
@@ -1425,6 +1447,8 @@ func _effect_possible(s: int, eff: String) -> bool:
 			return not hand[s].is_empty() and not _move_in_sources(s, "X").is_empty()
 		"foe_move_out":
 			return army_size(other(s)) >= 2
+		"reroll2":
+			return not hand[s].is_empty() and not battle["dice"][s].is_empty()
 	return true
 
 
@@ -1504,6 +1528,17 @@ func _effect(s: int, eff: String) -> void:
 		"win_str":
 			if battle["winner"] == s:
 				battle["bonus"][s] += 1
+		"reroll2":
+			var dc := await pick_cards(s, "reroll_card", "Scegli la Carta Supporto da scartare", hand[s].duplicate(), 1, 1)
+			for c in dc:
+				discard_support(s, c)
+			battle["sup_any"][s] = true
+			for k in 2:
+				changed.emit()
+				var sel := await pick_dice(s, "reroll", "Ritiro %d di 2: scegli i Dadi da ritirare" % (k + 1), _dice_items(s), 0, 99)
+				for it in sel:
+					_reroll(s, it[1])
+				log_msg("%s ritira %d Dad%s." % [pname(s), sel.size(), "o" if sel.size() == 1 else "i"])
 	changed.emit()
 
 
@@ -1685,6 +1720,11 @@ func _battle_phase(s: int) -> void:
 				"rus":
 					if not battle["dice"][s].is_empty() or not battle["dice"][o].is_empty():
 						opts.append({"label": "Abilità del Titano: ritira 1 Dado qualsiasi", "k": "titan"})
+				"sri":
+					if not hand[s].is_empty() and not sface.is_empty():
+						opts.append({"label": "Abilità del Titano: scarta 1 Carta Supporto e prendine 1 scoperta", "k": "titan"})
+		if has_titan(s) and can_adv(s, "die_k") and can_roll(s, "K"):
+			opts.append({"label": "Abilità Avanzata (6 Energia): aggiungi 1 Dado Cavalleria", "k": "adv_die_k"})
 		if has_titan(s) and can_adv(s, "reroll_any") and not battle["dice"][s].is_empty():
 			opts.append({"label": "Abilità Avanzata (4 Energia): ritira qualsiasi tuo Dado", "k": "adv_reroll"})
 		if has_titan(s) and can_adv(s, "draw2"):
@@ -1736,6 +1776,13 @@ func _battle_phase(s: int) -> void:
 						discard_support(s, c)
 					battle["sup_any"][s] = true
 					await _max_die(s)
+				elif nat(s) == "sri":
+					var dc := await pick_cards(s, "discard", "Scarta 1 Carta Supporto", hand[s].duplicate(), 1, 1)
+					for c in dc:
+						discard_support(s, c)
+					battle["sup_any"][s] = true
+					await _take_faceup(s)
+					log_msg("Il Guerriero della foresta di %s: cambia una Carta Supporto con una scoperta." % pname(s))
 				else:
 					var items := _dice_items(s) + _dice_items(o)
 					var sel := await pick_dice(s, "titan_reroll", "Scegli 1 Dado da ritirare (tuo o dell'avversario)", items, 1, 1)
@@ -1750,6 +1797,9 @@ func _battle_phase(s: int) -> void:
 			"adv_draw2":
 				_pay_adv(s, "draw2")
 				draw_support(s, 2)
+			"adv_die_k":
+				_pay_adv(s, "die_k")
+				_roll_die(s, "K")
 			"adv_take":
 				_pay_adv(s, "take_faceup")
 				await _take_faceup(s)

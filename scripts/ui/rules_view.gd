@@ -54,7 +54,7 @@ func _ready() -> void:
 	right.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	right.size_flags_vertical = Control.SIZE_EXPAND_FILL
 	cols.add_child(right)
-	var pages := [["Regole", _rules_a(), _rules_b()], ["Nazioni", _nations_a(), _nations_b()], ["Avanzata e varianti", _adv(), _digital()]]
+	var pages := [["Regole", _rules_a(), _rules_b()], ["Nazioni", _nations_a(), _nations_b()], ["5ª Nazione", _nation("sri"), _fifth()], ["Avanzata e varianti", _adv(), _digital()]]
 	for i in pages.size():
 		var b := UI.button(pages[i][0], 220, 44, 19)
 		var k := i
@@ -140,6 +140,14 @@ func _nation(nt: String) -> String:
 	return s + "\n"
 
 
+func _fifth() -> String:
+	var s := _h("Espansione 5ª Nazione")
+	s += "Aggiunge il Sacro Romano Impero, con 10 scenari sul lato B del tabellone: 4 per 2 giocatori, 2 per 3, 2 per 4 e 2 per 5 giocatori.\n\n"
+	s += _h("Partita a 5 giocatori")
+	s += "Si aggiungono 4 Carte Ordini (e 4 Carte Ordini Avanzati in Modalità Avanzata): il mazzo è di 20 carte. Nell'Area degli Ordini e negli Ordini Successivi ci sono 4 carte, come in 4 giocatori; ognuno gioca 3 turni per Round. Gli Obiettivi Segreti si risolvono come in 4 giocatori.\n"
+	return s
+
+
 func _adv() -> String:
 	var s := _h("Modalità Avanzata")
 	s += "Si usa il Mazzo Ordini Avanzati e il lato della plancia con il tracciato Energia (si parte con 1, massimo 10).\n"
@@ -166,5 +174,5 @@ func _digital() -> String:
 	s += "• Le carte Supporto giocate in coppia o in tris sono scelte automaticamente fra quelle con il requisito soddisfatto.\n"
 	s += "• Il Bogatyr russo può far ritirare un dado qualsiasi della Battaglia, anche dell'avversario.\n"
 	s += "• Lo spazio fisico delle regioni non è limitato.\n"
-	s += "• Non sono incluse (per ora) la Modalità Solitario con l'Automa e le espansioni.\n"
+	s += "• Non sono incluse (per ora) la Modalità Solitario con l'Automa e le espansioni diverse dalla 5ª Nazione.\n"
 	return s

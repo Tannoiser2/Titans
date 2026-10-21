@@ -492,6 +492,9 @@ func _pick(eng, s: int, req: Dictionary) -> int:
 			step = {}
 			return best
 		"action":
+			for i in opts.size():
+				if opts[i]["action"] == "_titan_inf":
+					return i
 			if plan.is_empty():
 				return opts.size() - 1
 			var nxt: Dictionary = plan[0]
@@ -889,12 +892,18 @@ func _gain(eng, s: int, o: Dictionary) -> Dictionary:
 				"move_in":
 					g = 1.2
 					cost = 1.0
+				"reroll2":
+					for d in bt["dice"][s]:
+						g += maxf(0.0, EDIE[d["t"]] - float(d["v"])) * 1.3
+					cost = 1.0
 				"foe_move_out":
 					g = 1.0
 				_:
 					g = 0.3
 			return {"gain": g, "cost": cost}
 		"titan":
+			if eng.nat(s) == "sri":
+				return {"gain": 0.3, "cost": 0.4}
 			if eng.nat(s) == "pol":
 				var g := 0.0
 				for d in bt["dice"][s]:
@@ -913,6 +922,8 @@ func _gain(eng, s: int, o: Dictionary) -> Dictionary:
 			return {"gain": g * 0.9, "cost": 1.2}
 		"adv_draw2":
 			return {"gain": 1.2, "cost": 1.5}
+		"adv_die_k":
+			return {"gain": EDIE["K"], "cost": 1.2}
 		"adv_take":
 			return {"gain": 0.8, "cost": 1.2}
 	return {"gain": 0.0, "cost": 1.0}
