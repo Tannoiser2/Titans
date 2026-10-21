@@ -35,7 +35,16 @@ func set_exp(e: String) -> void:
 			set(p[0], float(p[1]))
 
 
+var randomp := false
+
+
 func decide(eng, s: int, req: Dictionary):
+	if randomp:
+		match req["type"]:
+			"pick":
+				return rng.randi() % (req["options"] as Array).size()
+			"region":
+				return req["allowed"][rng.randi() % (req["allowed"] as Array).size()]
 	match req["type"]:
 		"pick":
 			return _pick(eng, s, req)
@@ -57,6 +66,44 @@ func noise() -> float:
 func support_value(card: int) -> float:
 	var k: String = D.SUPPORT[card]["kind"]
 	return {"forza": 1.0, "dado": 1.05, "muovi": 0.8}[k]
+
+
+var smart_cards := true
+
+
+## Valore di una Carta Supporto per il posto s: tipo, probabilità che il requisito sia soddisfatto
+## (le unità che ho / che hanno gli avversari) e combinazioni con le carte già in mano.
+func card_worth(eng, s: int, card: int, hand: Array) -> float:
+	if not smart_cards:
+		return support_value(card)
+	var c: Dictionary = D.SUPPORT[card]
+	var v := support_value(card)
+	var rq: Array = c["req"]
+	var have := 0
+	var tot := 0
+	for r in eng.regions:
+		var o: int = eng.reg[r]["own"]
+		if o < 0:
+			continue
+		var is_me: bool = o == s
+		if (rq[0] == "own") == is_me:
+			tot += 1
+			if eng.reg[r]["n"][rq[1]] > 0:
+				have += 1
+	var p := 0.25 + 0.75 * (float(have) / maxf(1.0, float(tot)))
+	if rq[1] == "T" and rq[0] == "own" and eng.titan[s] != "board":
+		p *= 0.6
+	v *= p
+	# set: due «Aggiungi un Dado» danno un Dado Titano, «Aggiungi Forza» in coppia +3 e in tris +5
+	var same := 0
+	for h in hand:
+		if h != card and D.SUPPORT[h]["kind"] == c["kind"]:
+			same += 1
+	if c["kind"] == "forza":
+		v += 0.35 * mini(same, 2)
+	elif c["kind"] == "dado":
+		v += 0.25 * mini(same, 1)
+	return v
 
 
 func nation_card_value(eng, s: int, ci: int) -> float:
@@ -94,12 +141,75 @@ func cnt_size(cnt: Dictionary) -> int:
 func p_attack(eng, att: int, acnt: Dictionary, dfn: int, dcnt: Dictionary, strong: bool) -> float:
 	if cnt_size(dcnt) == 0:
 		return 1.0
-	var ea: float = army_power(acnt) + 0.75 * mini(eng.hand[att].size(), 4) + 0.5 * eng.nowned[att].size()
-	var ed: float = army_power(dcnt) + 0.75 * mini(eng.hand[dfn].size() + (1 if strong else 0), 4) + 0.5 * eng.nowned[dfn].size()
-	if strong:
-		ed += 0.6
-	var x: float = (ea - ed - 0.4) / 2.2
-	return 1.0 / (1.0 + exp(-x * 1.7))
+	if not exact_odds:
+		var ea: float = army_power(acnt) + 0.75 * mini(eng.hand[att].size(), 4) + 0.5 * eng.nowned[att].size()
+		var ed: float = army_power(dcnt) + 0.75 * mini(eng.hand[dfn].size() + (1 if strong else 0), 4) + 0.5 * eng.nowned[dfn].size()
+		if strong:
+			ed += 0.6
+		var x: float = (ea - ed - 0.4) / 2.2
+		return 1.0 / (1.0 + exp(-x * 1.7))
+	# distribuzioni esatte dei dadi più le risorse attese (carte in mano, carte Nazione, abilità)
+	var xa: float = w_card * mini(eng.hand[att].size(), 4) + w_nc * eng.nowned[att].size() + w_last
+	var xd: float = w_card * mini(eng.hand[dfn].size() + (1 if strong else 0), 4) + w_nc * eng.nowned[dfn].size()
+	xa += _nat_bonus(eng.nat(att), acnt)
+	xd += _nat_bonus(eng.nat(dfn), dcnt)
+	return _p_win(acnt, dcnt, xa - xd)
+
+
+var exact_odds := true
+var def_battles := false
+var reply := true
+var timing := false
+var use_obj := true
+var w_need := 1.0
+var push_tier := true
+var w_tier := 1.0
+var w_obj := 1.0
+var w_reply := 0.5
+var w_card := 0.6
+var w_nc := 0.35
+var w_last := 0.6
+var _dist_cache := {}
+
+
+func _nat_bonus(nt: String, c: Dictionary) -> float:
+	var f: int = c.get("F", 0)
+	var k: int = c.get("K", 0)
+	match nt:
+		"pol": return 1.0 if k >= 2 else 0.0
+		"rus": return EDIE["F"] if f == 1 else 0.0
+		"sve": return EDIE["K"] if f >= 2 else 0.0
+		"ott": return 1.0 if f > 0 and c.get("A", 0) > 0 else 0.0
+		"sri": return EDIE["F"] if cnt_size(c) in [2, 3] else 0.0
+	return 0.0
+
+
+## Distribuzione della somma dei dadi di un'armata (limite di dadi compreso).
+func _dist(c: Dictionary) -> Dictionary:
+	var key := "%d%d%d%d" % [mini(c.get("F", 0), 3), mini(c.get("K", 0), 2), mini(c.get("A", 0), 1), mini(c.get("T", 0), 1)]
+	if _dist_cache.has(key):
+		return _dist_cache[key]
+	var d := {0: 1.0}
+	for t in ["F", "K", "A", "T"]:
+		for i in mini(c.get(t, 0), D.DICE_LIMIT[t] if t != "T" else 1):
+			var nd := {}
+			for v in d:
+				for f in D.DICE[t]:
+					nd[v + f] = nd.get(v + f, 0.0) + d[v] / 6.0
+			d = nd
+	_dist_cache[key] = d
+	return d
+
+
+func _p_win(acnt: Dictionary, dcnt: Dictionary, delta: float) -> float:
+	var da := _dist(acnt)
+	var dd := _dist(dcnt)
+	var p := 0.0
+	for a in da:
+		for b in dd:
+			var x: float = float(a - b) + delta - 0.5
+			p += da[a] * dd[b] / (1.0 + exp(-x * 1.6))
+	return p
 
 
 # ================================================================ simulazione leggera del tabellone
@@ -143,7 +253,7 @@ class Sim:
 		o.titan = titan.duplicate()
 		o.battles = []
 		for b in battles:
-			o.battles.append({"r": b["r"], "att": b["att"], "cnt": b["cnt"].duplicate()})
+			o.battles.append({"r": b["r"], "att": b["att"], "cnt": b["cnt"].duplicate(), "src": b.get("src", -1)})
 		o.hand = hand.duplicate()
 		o.vp_gain = vp_gain
 		return o
@@ -167,7 +277,7 @@ func make_sim(eng) -> Sim:
 		var c := {"F": 0, "K": 0, "A": 0, "T": 0}
 		for u in b["u"]:
 			c[u["t"]] += 1
-		sm.battles.append({"r": b["r"], "att": b["att"], "cnt": c})
+		sm.battles.append({"r": b["r"], "att": b["att"], "cnt": c, "src": b["u"][0]["from"] if not b["u"].is_empty() else -1})
 	return sm
 
 
@@ -188,7 +298,7 @@ func sim_move(eng, sm: Sim, s: int, src: int, dst: int, cnt: Dictionary) -> void
 		var full := {"F": 0, "K": 0, "A": 0, "T": 0}
 		for t in cnt:
 			full[t] += cnt[t]
-		sm.battles.append({"r": dst, "att": s, "cnt": full})
+		sm.battles.append({"r": dst, "att": s, "cnt": full, "src": src})
 		return
 	var o := sm.owner(dst)
 	if o >= 0 and o != s:
@@ -219,6 +329,13 @@ func sim_deploy(sm: Sim, s: int, t: String, r: int) -> void:
 func evaluate(eng, sm: Sim, s: int) -> float:
 	var rem: float = eng.rounds_total - eng.round_no + 1
 	var rv := 0.8 + 0.7 * rem
+	var thr_scale := 1.0
+	if timing:
+		# quanti turni restano prima della valutazione di fine Round
+		var picks := picks_left(eng)
+		var opp_turns := float(picks) * float(eng.n - 1) / float(eng.n)
+		thr_scale = clampf(opp_turns / float(eng.n - 1), 0.0, 1.0) if eng.n > 1 else 0.0
+		rv = 1.0 * (0.4 + 0.6 * clampf(1.0 - opp_turns / 6.0, 0.0, 1.0)) + 0.7 * (rem - 1.0) + 0.5
 	var mine := 0.0
 	var others := 0.0
 	var owners := {}
@@ -241,6 +358,16 @@ func evaluate(eng, sm: Sim, s: int) -> float:
 		var loss := (1.6 + 0.5 * army_power(b["cnt"])) * w_loss
 		bat_val += p * gain - (1.0 - p) * loss
 		contested[r] = true
+	if def_battles:
+		for b in sm.battles:
+			var r: int = b["r"]
+			if b["att"] == s or sm.own[r] != s:
+				continue
+			var strong: bool = sm.fort[r] or sm.cap[r] == s
+			var p := p_attack(eng, b["att"], b["cnt"], s, sm.cnt[r], strong)
+			var loss := rv * 2.0 + 1.6 + (1.0 if sm.fort[r] else 0.0) + (3.0 if sm.cap[r] == s else 0.0) + 0.5 * army_power(sm.cnt[r])
+			bat_val -= p * loss - (1.0 - p) * 1.2
+			contested[r] = true
 	for r in owners:
 		var o: int = owners[r]
 		if o < 0 or contested.has(r):
@@ -270,16 +397,17 @@ func evaluate(eng, sm: Sim, s: int) -> float:
 			var x := (worst - my - 0.3) / 2.0
 			var pl := 1.0 / (1.0 + exp(-x * 1.7))
 			var val := rv + (3.0 if sm.cap[r] == s else 0.0) + (1.0 if sm.fort[r] else 0.0)
-			threat += pl * val * w_threat
+			threat += pl * val * w_threat * thr_scale
 	# unità sul tabellone (in riserva non servono)
 	var units := 0.0
 	for r in sm.own:
 		if sm.own[r] == s:
 			for t in D.UNITS:
 				units += sm.cnt[r][t] * UNIT_VAL[t] * w_units
+	var objv := _objectives_value(eng, sm, s, owners) if use_obj else 0.0
 	var opp_w := 1.0 if eng.n == 2 else 0.6
 	var nopp: int = maxi(1, eng.n - 1)
-	return mine - opp_w * others / nopp * (2.0 if eng.n == 2 else 1.0) * w_opp - threat + bat_val + units + sm.vp_gain
+	return objv + mine - opp_w * others / nopp * (2.0 if eng.n == 2 else 1.0) * w_opp - threat + bat_val + units + sm.vp_gain
 
 
 # ================================================================ Fase A: pianificazione
@@ -392,13 +520,211 @@ func _buy_value(eng, s: int, extra: int) -> float:
 ## Piano per una carta Ordini: [punteggio, passi]. «Difficile» esplora le combinazioni migliori
 ## (ordine delle azioni compreso), gli altri livelli scelgono un'azione alla volta.
 func plan_card(eng, s: int, card: int) -> Array:
+	var r: Array
 	if level >= 2 or exp.contains("beam"):
 		var acts: Array = (eng.odeck_src[card]["a"] as Array).duplicate()
 		var sm := make_sim(eng)
 		var base := evaluate(eng, sm, s)
-		var r := _beam(eng, s, sm, base, acts, 4)
-		return r
-	return _plan_greedy(eng, s, card)
+		r = _beam(eng, s, sm, base, acts, 4)
+	else:
+		r = _plan_greedy(eng, s, card)
+	if reply and level >= 1:
+		r[0] = (1.0 - w_reply) * r[0] + w_reply * _after_reply(eng, s, card, r[1])
+	return r
+
+
+## Valore del piano dopo la risposta migliore del giocatore successivo (con le carte che gli restano).
+func _after_reply(eng, s: int, card: int, steps: Array) -> float:
+	var sm := make_sim(eng)
+	var base := evaluate(eng, sm, s)
+	for st in steps:
+		if st["a"] != "buy" and st["a"] != "buy1":
+			_apply_cand(eng, sm, s, st)
+	sim_resolve(eng, sm, s)
+	var o: int = (s + 1) % eng.n
+	var cards := []
+	if eng.area_picks - 1 <= 0 or eng.visible_area().size() <= 2:
+		cards = eng.onext.duplicate()
+		if eng.onext_hidden > 0 and cards.size() > 0:
+			cards.pop_back()
+	else:
+		cards = eng.visible_area()
+		cards.erase(card)
+	if cards.is_empty():
+		return evaluate(eng, sm, s) - base
+	var best_o := -1e9
+	var best_sm: Sim = sm
+	for c in cards:
+		var sm2 := sm.dup()
+		var acts: Array = (eng.odeck_src[c]["a"] as Array).duplicate()
+		_greedy_sm(eng, o, sm2, acts)
+		var vo := evaluate(eng, sm2, o)
+		if vo > best_o:
+			best_o = vo
+			best_sm = sm2
+	return evaluate(eng, best_sm, s) - base
+
+
+## Piano goloso senza casualità su una simulazione (la modifica).
+func _greedy_sm(eng, s: int, sm: Sim, acts: Array) -> void:
+	var base := evaluate(eng, sm, s)
+	while not acts.is_empty():
+		var best_v := 0.05
+		var best_c := {}
+		for a in acts:
+			if a == "buy" or a == "buy1":
+				continue
+			for cd in _candidates(eng, sm, s, a):
+				var sm2 := sm.dup()
+				_apply_cand(eng, sm2, s, cd)
+				var v := evaluate(eng, sm2, s) - base
+				if v > best_v:
+					best_v = v
+					best_c = cd
+		if best_c.is_empty():
+			return
+		_apply_cand(eng, sm, s, best_c)
+		base = evaluate(eng, sm, s)
+		acts.erase(best_c["a"])
+
+
+## Valore degli Obiettivi Segreti in mano nella posizione simulata: pieni se completati, una parte se
+## ci si avvicina. Gli obiettivi di battaglia valgono per le battaglie innescate.
+func _objectives_value(eng, sm: Sim, s: int, owners: Dictionary) -> float:
+	if eng.obj_hand[s].is_empty() or eng.obj_turn[s] == eng.turn_no:
+		return 0.0
+	var pidx := clampi(eng.n - 2, 0, 2)
+	var mine := []
+	for r in owners:
+		if owners[r] == s:
+			mine.append(r)
+	var my_battles := []
+	for b in sm.battles:
+		if b["att"] == s:
+			my_battles.append(b)
+	var best := 0.0
+	for o in eng.obj_hand[s]:
+		var od: Dictionary = D.OBJECTIVES[o]
+		var vp := float(od["vp"])
+		var prog := 0.0
+		match od["kind"]:
+			"units_on_board":
+				var k := 0
+				for r in sm.own:
+					if sm.own[r] == s:
+						k += sm._size(sm.cnt[r])
+				for b in my_battles:
+					k += cnt_size(b["cnt"])
+				prog = float(k) / float(od["n"])
+			"regions":
+				prog = float(mine.size()) / float(od["n"][pidx])
+			"central_and_neigh":
+				var k := 0
+				for a in eng.adj(eng.central):
+					if owners.get(a, -1) == s:
+						k += 1
+				prog = (0.5 if owners.get(eng.central, -1) == s else 0.0) + 0.5 * minf(1.0, float(k) / float(od["n"][pidx]))
+				if owners.get(eng.central, -1) != s:
+					prog = minf(prog, 0.6)
+			"token_regions":
+				var k := 0
+				for r in mine:
+					if sm.own[r] != s or sm._size(sm.cnt[r]) == 0:
+						k += 1
+				prog = float(k) / float(od["n"])
+			"only_type_regions":
+				var u: String = od["u"]
+				var k := 0
+				for r in mine:
+					if sm.own[r] == s and sm._size(sm.cnt[r]) > 0 and sm._size(sm.cnt[r]) == sm.cnt[r][u]:
+						k += 1
+				prog = float(k) / float(od["n"])
+			"enemy_start":
+				var k := 0
+				for r in eng._enemy_starts(s):
+					if owners.get(r, -1) == s:
+						k += 1
+				prog = float(k) / float(od["n"])
+			"enemy_start_neigh":
+				var es: Array = eng._enemy_starts(s)
+				var k := 0
+				for r in mine:
+					if r in es:
+						continue
+					for a in eng.adj(r):
+						if a in es:
+							k += 1
+							break
+				prog = float(k) / float(od["n"])
+			"two_big_armies":
+				var k := 0
+				for r in sm.own:
+					if sm.own[r] == s and sm._size(sm.cnt[r]) >= 4:
+						k += 1
+				prog = float(k) / 2.0 * 0.8
+			"central_one_unit":
+				prog = 0.7 if sm.own.get(eng.central, -1) == s and sm._size(sm.cnt[eng.central]) == 1 else 0.0
+			"two_battles":
+				prog = 1.0 if my_battles.size() >= 2 and s == eng.active else 0.0
+			"win_central", "win_vs_titan_central", "att_smaller_win", "win_only_titan", "win_no_titan_vs_titan", "win_diff":
+				for b in my_battles:
+					var r: int = b["r"]
+					var dfn: int = sm.own[r]
+					var ok := false
+					match od["kind"]:
+						"win_central": ok = r == eng.central
+						"win_vs_titan_central": ok = r == eng.central and sm.cnt[r]["T"] > 0
+						"att_smaller_win": ok = cnt_size(b["cnt"]) < sm._size(sm.cnt[r])
+						"win_only_titan": ok = cnt_size(b["cnt"]) == 1 and b["cnt"]["T"] == 1
+						"win_no_titan_vs_titan": ok = b["cnt"]["T"] == 0 and sm.cnt[r]["T"] > 0
+						"win_diff": ok = army_power(b["cnt"]) - army_power(sm.cnt[r]) >= 4.0
+					if ok:
+						var strong: bool = sm.fort[r] or sm.cap[r] == dfn
+						prog = maxf(prog, p_attack(eng, s, b["cnt"], dfn, sm.cnt[r], strong) * (0.6 if od["kind"] == "win_diff" else 1.0))
+				prog = prog * 0.999
+		var v := 0.0
+		if prog >= 1.0:
+			v = vp
+		else:
+			v = vp * prog * prog * 0.45
+		best = maxf(best, v) if prog >= 1.0 else best + v * 0.5
+	return best * w_obj
+
+
+## Turni (scelte di Carte Ordini) che restano nel Round, compreso quello in corso.
+func picks_left(eng) -> int:
+	var size: int = eng.area_size()
+	var cards: int = eng.onext.size() + eng.odeck.size()
+	return eng.area_picks + int(float(cards) * float(size - 1) / float(size))
+
+
+## Risolve le battaglie del posto s nella simulazione secondo la loro probabilità.
+func sim_resolve(eng, sm: Sim, s: int) -> void:
+	var keep := []
+	for b in sm.battles:
+		if b["att"] != s:
+			keep.append(b)
+			continue
+		var r: int = b["r"]
+		var dfn: int = sm.own[r]
+		var strong: bool = sm.fort[r] or sm.cap[r] == dfn
+		var p := p_attack(eng, s, b["cnt"], dfn, sm.cnt[r], strong)
+		if p >= 0.5:
+			if sm.cap[r] >= 0 and sm.cap[r] != s:
+				sm.cap[r] = -1
+			sm.fort[r] = false
+			sm.own[r] = s
+			sm.cnt[r] = b["cnt"].duplicate()
+			sm.tok[r] = -1
+		else:
+			var src: int = b.get("src", -1)
+			if src > 0:
+				sm.own[src] = s
+				for t in b["cnt"]:
+					sm.cnt[src][t] += b["cnt"][t]
+				if sm.tok[src] == s:
+					sm.tok[src] = -1
+	sm.battles = keep
 
 
 func _beam(eng, s: int, sm: Sim, base: float, acts: Array, k: int) -> Array:
@@ -540,6 +866,16 @@ func _pick(eng, s: int, req: Dictionary) -> int:
 		"battle_order":
 			return 0
 		"draw", "reinf_draw":
+			if smart_cards:
+				var best := opts.size() - 1
+				var bv := 0.62          # valore atteso di una carta coperta
+				for i in opts.size():
+					if opts[i]["card"] >= 0:
+						var v := card_worth(eng, s, opts[i]["card"], eng.hand[s])
+						if v > bv:
+							bv = v
+							best = i
+				return best
 			for i in opts.size():
 				if opts[i]["card"] >= 0 and D.SUPPORT[opts[i]["card"]]["kind"] == "forza":
 					return i
@@ -737,7 +1073,7 @@ func _cards(eng, s: int, req: Dictionary) -> Array:
 func _keep_score(eng, s: int, card) -> float:
 	if not (card is int):
 		return 0.0
-	var v := support_value(card)
+	var v := card_worth(eng, s, card, eng.hand[s]) if eng.battle.is_empty() else support_value(card)
 	if not eng.battle.is_empty() and (s == eng.battle["att"] or s == eng.battle["def"]):
 		if not eng.support_req_ok(s, card):
 			v -= 0.5
@@ -801,7 +1137,7 @@ func _need(eng, s: int) -> int:
 	if not eng.battle["done"].has(o):
 		# l'avversario risponderà: margine in base alle sue risorse
 		var pot: float = 0.8 * mini(eng.hand[o].size(), 4) + 0.6 * eng.usable_nation_cards(o, "battaglia").size()
-		target += int(round(pot * (0.55 if level >= 1 else 0.35)))
+		target += int(round(pot * (w_need if level >= 1 else 0.35)))
 	return target
 
 
@@ -826,6 +1162,15 @@ func _battle(eng, s: int, opts: Array) -> int:
 		if sc > best_score:
 			best_score = sc
 			best = i
+	if gap <= 0 and push_tier and eng.battle["done"].has(eng.other(s)) and best >= 0:
+		# si gioca per ultimi e si vince già: conviene salire alla fascia successiva (3 o 5 di differenza)?
+		var lead: int = cur - eng.strength(eng.other(s))
+		var nxt: int = 3 if lead < 3 else (5 if lead < 5 else 99)
+		if nxt < 99:
+			var g0 := _gain(eng, s, opts[best])
+			if g0["gain"] + 0.3 >= float(nxt - lead) or (g0["cost"] < 0.3):
+				if g0["cost"] <= w_tier:
+					return best
 	if gap <= 0:
 		# già davanti: si usano solo le risorse gratuite
 		if best >= 0 and opts[best]["k"] == "nc" and _gain(eng, s, opts[best])["cost"] < 0.3 and s == eng.battle["first"]:

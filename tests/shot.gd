@@ -41,7 +41,7 @@ func _run() -> void:
 		await shot("regole")
 		quit()
 		return
-	var scen := "2-1A" if mode != "game4" else "4-2B"
+	var scen: String = {"game4": "4-2B", "game5": "5-2", "hre": "I2-1"}.get(mode, "2-1A")
 	var seats := []
 	for c in TIData.scenario(scen)["nations"]:
 		var nt: String = TIData.CODE_TO_NATION[c]

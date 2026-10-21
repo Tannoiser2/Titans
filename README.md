@@ -12,10 +12,10 @@ copia fisica e dal modulo Tabletop Simulator.
   mazzo, sconti di Round), Battaglie con i dadi veri del gioco e il limite di dadi, Carte Supporto singole, in
   coppia e in tris, ritiro dei dadi, abilità di Nazione e di Titano, esito della Battaglia con perdite, ritirate,
   carte al perdente e PV al vincitore, regola dell'ultima regione, 24 Obiettivi Segreti, fine del Round e Rinforzi.
-- **Tutti i 24 scenari del regolamento** (pagine 19–24), sui due lati del tabellone, con Regioni inattive e
+- **Tutti i 24 scenari del regolamento** (pagine 19–24) e i 10 della 5ª Nazione, sui due lati del tabellone, con Regioni inattive e
   Regione Centrale.
-- Le quattro nazioni con le loro 40 Carte Nazione: Commonwealth Polacco-Lituano, Zarato Russo, Regno di Svezia,
-  Impero Ottomano.
+- Le cinque nazioni con le loro Carte Nazione: Commonwealth Polacco-Lituano, Zarato Russo, Regno di Svezia,
+  Impero Ottomano e, con l'espansione 5ª Nazione, il Sacro Romano Impero (partite fino a 5 giocatori, mazzo di 20 Ordini).
 - **Modalità di gioco**: Modalità Avanzata (Ordini Avanzati, Energia, scambio degli Ordini, abilità avanzate del
   Titano), Presa della Capitale, Partita estesa a 4 Round.
 - **IA** a tre livelli in qualunque combinazione con i giocatori umani; più umani sullo stesso dispositivo con la
@@ -32,9 +32,16 @@ Nella Fase A simula, per ogni Carta Ordini disponibile, le azioni su una copia l
 posizione: regioni controllate (pesate dai Round che restano), Capitali e Fortezze, minacce degli eserciti nemici
 adiacenti e battaglie innescate con la loro probabilità di vittoria. «Facile» e «Normale» scelgono un'azione alla
 volta con un po' di casualità; «Difficile» esplora anche l'ordine delle azioni, senza casualità.
+Le probabilità delle Battaglie sono calcolate con le distribuzioni esatte dei dadi (limite di dadi compreso) più le
+risorse attese di ciascuno; gli Obiettivi Segreti in mano entrano nella valutazione delle mosse. «Normale» e
+«Difficile» valutano anche la risposta migliore del giocatore successivo con le Carte Ordini che gli restano.
+Le Carte Supporto si scelgono in base ai requisiti che si potranno soddisfare e ai set già in mano.
 In battaglia calcola quanta Forza serve per vincere (tenendo conto delle carte che l'avversario può ancora
 giocare) e spende prima le risorse gratuite (Carte Nazione «una volta per Battaglia», abilità), poi le Carte
-Supporto più convenienti; se la battaglia è persa comunque risparmia le carte, salvo per ridurre le perdite.
+Supporto più convenienti; se la battaglia è persa comunque risparmia le carte, salvo per ridurre le perdite;
+se vince giocando per ultimo valuta se salire alla fascia di differenza successiva (più PV, più perdite all'avversario).
+I pesi sono stati tarati con centinaia di partite simulate: contro la versione precedente la nuova vince fra il 37%
+e il 42% delle partite a 3 giocatori (contro il 33% atteso).
 Sceglie gli Obiettivi Segreti più facili da completare, le Carte Nazione più utili per il resto della partita e
 dove ritirarsi e schierare.
 
@@ -44,8 +51,8 @@ dove ritirarsi e schierare.
 - Gli Obiettivi Segreti si completano da soli appena possibile (al massimo uno per turno, il più ricco).
 - Il Bogatyr russo può far ritirare un dado qualsiasi della Battaglia, anche dell'avversario.
 - Lo spazio fisico delle regioni non è limitato.
-- Non sono ancora incluse la Modalità Solitario con l'Automa e le espansioni (5ª Nazione, Monumenti, Campi di
-  Sangue, Echi del Passato, Pioggia di Fuoco, Emissari del Re): il materiale italiano c'è, si possono aggiungere.
+- Non sono ancora incluse la Modalità Solitario con l'Automa (le carte Automa non sono nel modulo TTS) e le altre
+  espansioni (Monumenti, Campi di Sangue, Echi del Passato, Pioggia di Fuoco, Emissari del Re).
 
 ## Comandi
 Trascina con il tasto sinistro per ruotare la vista, con il destro per spostarla, rotella per lo zoom; «Vista»

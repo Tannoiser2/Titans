@@ -249,7 +249,10 @@ func _model(kind: String, nat: String, height: float) -> Node3D:
 	xf.origin -= Vector3(a2.get_center().x, a2.position.y, a2.get_center().z)
 	mi.transform = xf
 	var col := UI.ncol(nat) if nat != "" else Color("#8c8a84")
-	mi.material_override = _mat(nat + kind, col.lightened(0.08), 0.5, 0.2 if kind != "C" else 0.05)
+	if nat == "sri":
+		mi.material_override = _mat(nat + kind, Color("#5a5c66"), 0.32, 0.65)
+	else:
+		mi.material_override = _mat(nat + kind, col.lightened(0.08), 0.5, 0.2 if kind != "C" else 0.05)
 	mi.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_ON
 	holder.add_child(mi)
 	return holder

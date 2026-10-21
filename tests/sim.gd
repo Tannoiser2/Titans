@@ -37,6 +37,8 @@ func _run(games: int, np: int, lvl: int, adv: bool) -> void:
 			eng.ais[i] = TIAI.new(lvl0 if i == tseat else lvl, 77 + g * 10 + i)
 			if i == tseat:
 				eng.ais[i].set_exp(OS.get_environment("TI_EXP"))
+			else:
+				eng.ais[i].set_exp(OS.get_environment("TI_EXP_O"))
 		eng.changed.connect(_check.bind(eng))
 		if OS.get_environment("TI_LIVE") == "1":
 			eng.log_added.connect(func(t): print("  ", t))
