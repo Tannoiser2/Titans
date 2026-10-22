@@ -130,21 +130,21 @@ func _ready() -> void:
 	right.custom_minimum_size = Vector2(1000, 650)
 	page.add_child(right)
 	var rv := VBoxContainer.new()
-	rv.add_theme_constant_override("separation", 10)
+	rv.add_theme_constant_override("separation", 6)
 	right.add_child(rv)
-	rv.add_child(UI.heading("Chi guida le Nazioni", 30))
+	rv.add_child(UI.heading("Chi guida le Nazioni", 26))
 	seats_scroll = ScrollContainer.new()
 	seats_scroll.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
 	rv.add_child(seats_scroll)
 	seats_box = VBoxContainer.new()
-	seats_box.add_theme_constant_override("separation", 6)
+	seats_box.add_theme_constant_override("separation", 4)
 	seats_box.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	seats_scroll.add_child(seats_box)
 	rv.add_child(HSeparator.new())
-	rv.add_child(UI.heading("Opzioni", 26))
+	rv.add_child(UI.heading("Opzioni", 22))
 	var orow := HBoxContainer.new()
 	orow.add_theme_constant_override("separation", 14)
-	var ol := UI.label("Varianti", 22, Color.WHITE, UI.font_head_b)
+	var ol := UI.label("Varianti", 19, Color.WHITE, UI.font_head_b)
 	ol.custom_minimum_size.x = 170
 	orow.add_child(ol)
 	for kv in [["Modalità Avanzata", "Mazzo Ordini Avanzati, Energia e abilità avanzate del Titano", advanced, func(v): advanced = v],
@@ -152,6 +152,7 @@ func _ready() -> void:
 			["Partita estesa", "4 Round invece di 3 (sconto 1 nel 3° Round, 2 nel 4°)", extended, func(v): extended = v]]:
 		var cb := CheckBox.new()
 		cb.text = kv[0]
+		cb.add_theme_font_size_override("font_size", 17)
 		cb.tooltip_text = kv[1]
 		cb.button_pressed = kv[2]
 		var f: Callable = kv[3]
@@ -163,12 +164,13 @@ func _ready() -> void:
 	xrow.custom_minimum_size.x = 980
 	xrow.add_theme_constant_override("h_separation", 8)
 	xrow.add_theme_constant_override("v_separation", 4)
-	var xl := UI.label("Espansioni", 22, Color.WHITE, UI.font_head_b)
+	var xl := UI.label("Espansioni", 19, Color.WHITE, UI.font_head_b)
 	xl.custom_minimum_size.x = 170
 	xrow.add_child(xl)
 	for kv in [["monuments", "Monumenti", "Ogni Nazione ha 3 Monumenti da costruire con le Carte Supporto"], ["emissaries", "Emissari", "3 Obiettivi Nazione segreti: il primo dà un Emissario che accompagna un'Armata, poi 3 e 5 PV"], ["fire", "Pioggia di Fuoco", "Un'Artiglieria di Fuoco per Nazione: conta come Artiglieria e tira anche 1 Dado Fanteria"], ["echoes", "Echi del Passato", "Unità Cadute che seguono le Armate e tirano i loro dadi in Battaglia; ognuno ha una carta con un'abilità negativa"], ["fields", "Campi di Sangue", "Cosacchi e il mazzo Supporto di Campi di Sangue, con Potenziamenti e Schieramenti dei Cosacchi"], ["spirit", "Spirito di Guerra", "Il mazzo Supporto di Spirito di Guerra con i suoi Dadi (con Campi di Sangue i due mazzi si mescolano e le carte scoperte sono 6)"], ["titans", "Potere dei Titani", "Carte Potere del Titano da attivare con i dadi quando il Titano è in Battaglia; se ne guadagna una attaccando con il Titano"]]:
 		var cb := CheckBox.new()
 		cb.text = kv[1]
+		cb.add_theme_font_size_override("font_size", 17)
 		cb.tooltip_text = kv[2]
 		cb.button_pressed = xp[kv[0]]
 		var key: String = kv[0]
@@ -176,10 +178,10 @@ func _ready() -> void:
 		xrow.add_child(cb)
 	opt_rows.append(xrow)
 	rv.add_child(xrow)
-	automa_row = _segmented("Automa", ["Base", "Avanzato"], automa_lvl, func(k): automa_lvl = k, 170)
+	automa_row = _segmented("Automa", ["Base", "Avanzato"], automa_lvl, func(k): automa_lvl = k, 150, 36)
 	automa_row.tooltip_text = "Livello Avanzato: l'Automa esegue anche le azioni con la stella delle sue carte"
 	rv.add_child(automa_row)
-	rv.add_child(_segmented("Velocità IA", ["Lenta", "Normale", "Veloce", "Istantanea"], speed, func(k): speed = k, 170))
+	rv.add_child(_segmented("Velocità IA", ["Lenta", "Normale", "Veloce", "Istantanea"], speed, func(k): speed = k, 150, 36))
 
 	msg = UI.label("", 24, UI.BLOOD_L, UI.font_head_b)
 	msg.position = Vector2(60, 1000)
@@ -273,23 +275,29 @@ func _refresh_seats() -> void:
 		r.visible = nplayers != 1
 	if nplayers == 1 and not solo_me in _scen_nations():
 		solo_me = _scen_nations()[0]
-	seats_scroll.custom_minimum_size = Vector2(980, mini(_scen_nations().size() * 80, 326))
+	seats_scroll.custom_minimum_size = Vector2(980, _scen_nations().size() * 71)
 	for nt in _scen_nations():
 		var row := PanelContainer.new()
-		row.add_theme_stylebox_override("panel", UI.panel_style(Color(UI.ndark(nt), 0.9), UI.ncol(nt), 2, 8))
+		var rsb := UI.panel_style(Color(UI.ndark(nt), 0.9), UI.ncol(nt), 2, 6)
+		rsb.content_margin_top = 3
+		rsb.content_margin_bottom = 3
+		rsb.content_margin_left = 6
+		rsb.content_margin_right = 6
+		row.add_theme_stylebox_override("panel", rsb)
 		var hb := HBoxContainer.new()
 		hb.add_theme_constant_override("separation", 10)
 		row.add_child(hb)
-		hb.add_child(UI.icon_rect(UI.banner(nt), Vector2(28, 56)))
+		hb.add_child(UI.icon_rect(UI.banner(nt), Vector2(22, 46)))
 		var vb := VBoxContainer.new()
+		vb.add_theme_constant_override("separation", 0)
 		vb.custom_minimum_size.x = 300
-		var nl := UI.label(D.NATIONS[nt]["name"], 19, Color.WHITE, UI.font_head_b)
+		var nl := UI.label(D.NATIONS[nt]["name"], 16, Color.WHITE, UI.font_head_b)
 		vb.add_child(nl)
 		var le := LineEdit.new()
 		le.text = names[nt]
 		le.max_length = 20
-		le.custom_minimum_size = Vector2(280, 32)
-		le.add_theme_font_size_override("font_size", 17)
+		le.custom_minimum_size = Vector2(280, 28)
+		le.add_theme_font_size_override("font_size", 15)
 		var ntt: String = nt
 		le.text_changed.connect(func(t): names[ntt] = t)
 		vb.add_child(le)
@@ -301,8 +309,8 @@ func _refresh_seats() -> void:
 			for k in 2:
 				var b := Button.new()
 				b.text = ["Tu", "Automa"][k]
-				b.custom_minimum_size = Vector2(200, 44)
-				b.add_theme_font_size_override("font_size", 20)
+				b.custom_minimum_size = Vector2(200, 40)
+				b.add_theme_font_size_override("font_size", 18)
 				var on: bool = (solo_me == nt) == (k == 0)
 				b.add_theme_stylebox_override("normal", UI.panel_style(UI.GOLD if on else Color("#1d1f24"), UI.GOLD if on else Color("#3a3833"), 2, 4))
 				b.add_theme_color_override("font_color", UI.IRON if on else UI.TEXT)
@@ -319,8 +327,8 @@ func _refresh_seats() -> void:
 		for k in MODES.size():
 			var b := Button.new()
 			b.text = MODES[k]
-			b.custom_minimum_size = Vector2(132, 44)
-			b.add_theme_font_size_override("font_size", 18)
+			b.custom_minimum_size = Vector2(132, 40)
+			b.add_theme_font_size_override("font_size", 17)
 			var on: bool = modes[nt] == k
 			b.add_theme_stylebox_override("normal", UI.panel_style(UI.GOLD if on else Color("#1d1f24"), UI.GOLD if on else Color("#3a3833"), 2, 4))
 			b.add_theme_color_override("font_color", UI.IRON if on else UI.TEXT)
@@ -347,18 +355,18 @@ func _toggle(title: String, desc: String, cur: bool, cb: Callable) -> Control:
 	return hb
 
 
-func _segmented(label_text: String, items: Array, cur: int, cb: Callable, w := 200) -> HBoxContainer:
+func _segmented(label_text: String, items: Array, cur: int, cb: Callable, w := 200, h := 46) -> HBoxContainer:
 	var hb := HBoxContainer.new()
 	hb.add_theme_constant_override("separation", 6)
-	var l := UI.label(label_text, 24, Color.WHITE, UI.font_head_b)
+	var l := UI.label(label_text, 24 if h >= 46 else 19, Color.WHITE, UI.font_head_b)
 	l.custom_minimum_size = Vector2(180, 0)
 	hb.add_child(l)
 	var btns := []
 	for k in range(items.size()):
 		var b := Button.new()
 		b.text = items[k]
-		b.custom_minimum_size = Vector2(w, 46)
-		b.add_theme_font_size_override("font_size", 20)
+		b.custom_minimum_size = Vector2(w, h)
+		b.add_theme_font_size_override("font_size", 20 if h >= 46 else 17)
 		hb.add_child(b)
 		btns.append(b)
 	var paint := func(sel: int):
