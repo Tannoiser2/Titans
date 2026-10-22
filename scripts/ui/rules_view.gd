@@ -205,7 +205,13 @@ func _xp_b() -> String:
 	s += "Ognuno sceglie una carta Unità Caduta (dall'ultimo giocatore, in senso antiorario) e mette 1 Unità Caduta in una sua Regione con Unità. Le Unità Cadute (12 in tutto) non si muovono né si schierano con gli Ordini: seguono gratis le Unità che muovi; se restano sole disertano.\n"
 	s += "• In Battaglia tirano 1 Dado Unità Caduta ciascuna (Forza 0, 1 o 2; alcune facce hanno il teschio). Dopo aver stabilito il vincitore si elimina 1 Unità Caduta per ogni teschio. Non si scelgono come perdite.\n"
 	s += "• Chi perde una Battaglia ottiene 1 Unità Caduta se soddisfa la condizione della sua carta; la carta ha anche un'abilità negativa che vale nelle Battaglie con le sue Unità Cadute.\n\n"
+	s += _h("Campi di Sangue")
+	s += "Il mazzo Supporto è sostituito da quello di Campi di Sangue (36 carte con lo stesso effetto e in più il Simbolo dei Cosacchi). Ognuno parte con 1 Cosacco in una sua Regione; i Cosacchi (15 in tutto) sono un tipo di Unità diverso, con il loro Dado (0, 0, 1, 1, 2, 2).\n"
+	s += "• Nella Fase A, una volta per turno, Azione speciale: muovi 1 Cosacco di 1 Regione, oppure metti una carta dalla mano sotto la Plancia come Potenziamento (mai due uguali), oppure, se non hai Cosacchi sulla mappa, scarta una carta con lo Schieramento e prendi 1 Cosacco.\n"
+	s += "• Con l'azione «Schiera 1 Unità» si può schierare un Cosacco; con i movimenti di «1 Unità» o «da 1 a 4 Unità» si muovono anche i Cosacchi. Un Cosacco che entra in una Regione non tua si ferma per quel turno.\n"
+	s += "• Dopo la Battaglia ognuno può usare il Simbolo dei Cosacchi delle carte giocate (non quelle scartate per ritirare): con 1–4 carte lo Schieramento (solo se non avevi Cosacchi in Battaglia) oppure 1 Potenziamento; con 5 o più lo Schieramento e 1 o 2 Potenziamenti.\n\n"
 	s += _h("Interpretazioni della versione digitale")
+	s += "• Campi di Sangue: il Dado Cosacco ha due facce vuote, due da 1 e due da 2 (dalle scansioni si vedono le facce con le sciabole).\n"
 	s += "• Unità Cadute: non contano per la dimensione dell'Armata né per il controllo delle Regioni.\n"
 	s += "• Il costo dei Monumenti è il numero romano della carta (I, II, III).\n"
 	s += "• Si costruisce al massimo 1 Monumento per turno. Castello Reale, San Basilio e Giannizzeri si attivano da soli, dopo le Battaglie o dopo la Fase D.\n"
@@ -240,5 +246,5 @@ func _digital() -> String:
 	s += "• Le carte Supporto giocate in coppia o in tris sono scelte automaticamente fra quelle con il requisito soddisfatto.\n"
 	s += "• Il Bogatyr russo può far ritirare un dado qualsiasi della Battaglia, anche dell'avversario.\n"
 	s += "• Lo spazio fisico delle regioni non è limitato.\n"
-	s += "• Non sono incluse (per ora) Campi di Sangue, Spirito di Guerra e Potere dei Titani.\n"
+	s += "• Non sono incluse (per ora) Spirito di Guerra e Potere dei Titani.\n"
 	return s

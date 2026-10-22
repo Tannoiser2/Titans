@@ -121,6 +121,11 @@ var fire_free: Array = []        # per posto: l'Artiglieria di Fuoco è nella ri
 var exp_echo := false            # Echi del Passato
 var fallen_pool := 0             # Unità Cadute nella riserva comune
 var fallen_card: Array = []      # per posto: carta Unità Caduta (indice di D.FALLEN_CARDS) o -1
+var exp_cos := false             # Campi di Sangue (Cosacchi e mazzo Supporto alternativo)
+var cossack_pool := 0            # Cosacchi nella riserva comune
+var cos_up: Array = []           # per posto: carte Supporto sotto la Plancia (Potenziamenti dei Cosacchi)
+var cos_turn := {}               # posto -> turno in cui ha usato l'Azione speciale dei Cosacchi
+var q_stop := {}                 # regioni dove un Cosacco si è fermato in questo turno
 
 
 # ================================================================ preparazione
@@ -144,6 +149,7 @@ func setup(config: Dictionary) -> void:
 	exp_emi = bool(config.get("emissaries", false)) and not solo
 	exp_fire = bool(config.get("fire", false)) and not solo
 	exp_echo = bool(config.get("echoes", false)) and not solo
+	exp_cos = bool(config.get("fields", false)) and not solo
 	for s in config["seats"]:
 		if bool(s.get("automa", false)):
 			automa = players.size()
@@ -165,7 +171,7 @@ func setup(config: Dictionary) -> void:
 	central = int(scen["central"])
 	reg = {}
 	for r in regions:
-		reg[r] = {"own": -1, "n": {"F": 0, "K": 0, "A": 0, "T": 0}, "tok": -1, "cap": -1, "capctrl": -1, "fort": false, "fire": -1, "mon": [], "fallen": 0}
+		reg[r] = {"own": -1, "n": {"F": 0, "K": 0, "A": 0, "T": 0, "Q": 0}, "tok": -1, "cap": -1, "capctrl": -1, "fort": false, "fire": -1, "mon": [], "fallen": 0}
 	reserve = []
 	titan = []
 	vp = []
@@ -188,6 +194,10 @@ func setup(config: Dictionary) -> void:
 	fire_free = []
 	fallen_card = []
 	fallen_pool = D.FALLEN_TOTAL
+	cos_up = []
+	cos_turn = {}
+	q_stop = {}
+	cossack_pool = D.COSSACK_TOTAL
 	mon_built_turn = {}
 	mon_declined = {}
 	mon_used = {}
@@ -200,7 +210,8 @@ func setup(config: Dictionary) -> void:
 		nobj_done.append([])
 		fire_free.append(exp_fire)
 		fallen_card.append(-1)
-		reserve.append({"F": D.UNIT_COUNT["F"], "K": D.UNIT_COUNT["K"], "A": D.UNIT_COUNT["A"]})
+		cos_up.append([])
+		reserve.append({"F": D.UNIT_COUNT["F"], "K": D.UNIT_COUNT["K"], "A": D.UNIT_COUNT["A"], "Q": 0})
 		titan.append("up")
 		vp.append(0)
 		energy.append(1 if advanced else 0)
@@ -233,7 +244,7 @@ func setup(config: Dictionary) -> void:
 					else:
 						reserve[s][ch] -= 1
 	# mazzi
-	sdeck = range(D.SUPPORT.size())
+	sdeck = range(D.SUPPORT_BASE, D.SUPPORT.size()) if exp_cos else range(D.SUPPORT_BASE)
 	_shuffle(sdeck)
 	sdiscard = []
 	sface = []
@@ -413,7 +424,7 @@ func adj(r: int) -> Array:
 
 func units_total(r: int) -> int:
 	var c: Dictionary = reg[r]["n"]
-	return c["F"] + c["K"] + c["A"] + c["T"]
+	return c["F"] + c["K"] + c["A"] + c["T"] + c["Q"]
 
 
 ## Chi controlla la regione (-1 nessuno).
@@ -520,10 +531,18 @@ func move_targets(s: int, from: int) -> Array:
 	return out
 
 
+## Tipi di Unità che possono muovere da r (un Cosacco entrato in una Regione non sua si ferma per il turno).
+func movable_types(r: int) -> Array:
+	var out := unit_types_in(r)
+	if q_stop.has(r):
+		out.erase("Q")
+	return out
+
+
 func move_sources(s: int, t: String) -> Array:
 	var out := []
 	for r in regions:
-		if reg[r]["own"] == s and (reg[r]["n"][t] > 0 if t != "X" else units_total(r) > 0):
+		if reg[r]["own"] == s and (reg[r]["n"][t] > 0 if t != "X" else not movable_types(r).is_empty()) and not (t == "Q" and q_stop.has(r)):
 			if not move_targets(s, r).is_empty():
 				out.append(r)
 	return out
@@ -536,12 +555,14 @@ func deploy_targets(s: int) -> Array:
 func has_reserve(s: int, t: String) -> bool:
 	if t == "T":
 		return titan[s] != "board"
+	if t == "Q":
+		return exp_cos and cossack_pool > 0
 	return reserve[s][t] > 0
 
 
 func deployable_types(s: int, t: String) -> Array:
 	var out := []
-	for u in (["F", "K", "A", "T"] if t == "X" else [t]):
+	for u in ((["F", "K", "A", "T", "Q"] if exp_cos else ["F", "K", "A", "T"]) if t == "X" else [t]):
 		if has_reserve(s, u):
 			out.append(u)
 	return out
@@ -701,6 +722,15 @@ func _initial_setup() -> void:
 		for o in p:
 			objdeck.append(o)
 	log_msg("Ogni giocatore ha scelto 3 Obiettivi Segreti.")
+	if exp_cos:
+		for i in n:
+			var sq := (first + i) % n
+			var rs := controlled(sq)
+			if not rs.is_empty() and cossack_pool > 0:
+				var rq := await pick_region(sq, "q_place", "Campi di Sangue: in quale tua Regione metti il Cosacco?", rs, false, {"unit": "Q"})
+				_put(rq, sq, "Q")
+				cossack_pool -= 1
+				log_msg("%s mette 1 Cosacco in %s." % [pname(sq), rname(rq)])
 	phase = "play"
 	changed.emit()
 
@@ -812,6 +842,7 @@ func _turn(s: int) -> void:
 	battles = []
 	battles_started = 0
 	turn_abilities = {}
+	q_stop = {}
 	log_msg("Turno di %s." % pname(s))
 	changed.emit()
 	# prima della Fase A: carte Nazione (Svezia) e scambio di Ordini (Avanzata)
@@ -923,6 +954,8 @@ func _do_actions(s: int) -> void:
 		if tr > 0 and can_adv(s, "titan_inf") and reserve[s]["F"] > 0:
 			opts.append({"label": "Abilità Avanzata (7 Energia): +1 Fanteria nella Regione del Titano", "action": "_titan_inf", "ok": true})
 		opts.append_array(mon_turn_options(s, false))
+		if not cos_actions(s).is_empty():
+			opts.append({"label": "Azione speciale dei Cosacchi", "action": "_cos", "ok": true})
 		opts.append({"label": "Fine delle azioni", "action": ""})
 		var k := await pick(s, "action", "Ordini: scegli un'azione (in qualsiasi ordine)", opts, {"order": cur_order})
 		var a: String = opts[k]["action"]
@@ -932,6 +965,9 @@ func _do_actions(s: int) -> void:
 			continue
 		if a.begins_with("_mon"):
 			await _mon_turn_action(s, opts[k])
+			continue
+		if a == "_cos":
+			await _cos_special(s)
 			continue
 		if a == "_titan_inf":
 			_pay_adv(s, "titan_inf")
@@ -1019,7 +1055,7 @@ func _move_one(s: int, t: String, ctx: String, no_battle := false) -> bool:
 		return false
 	var ut := t
 	if t == "X":
-		var types := unit_types_in(src)
+		var types := movable_types(src)
 		if types.size() == 1:
 			ut = types[0]
 		else:
@@ -1048,7 +1084,7 @@ func _move_army(s: int, nmax: int) -> bool:
 	if src < 0:
 		return false
 	var items := []
-	for u in D.UNITS:
+	for u in movable_types(src):
 		for i in reg[src]["n"][u]:
 			items.append(u)
 	var sel := await pick_cards(s, "army_units", "Quali Unità muovi da %s? (da 1 a %d)" % [rname(src), nmax], items, 1, nmax, {"units": true, "region": src})
@@ -1124,6 +1160,8 @@ func _move_units(s: int, src: int, dst: int, cnt: Dictionary) -> void:
 		_enter_enemy_free(s, dst, o)
 	for u in cnt:
 		_put(dst, s, u, cnt[u])
+	if cnt.has("Q") and o != s:
+		q_stop[dst] = true
 	if fire_go:
 		reg[dst]["fire"] = s
 	if emi_go:
@@ -1201,7 +1239,9 @@ func _deploy(s: int, t: String) -> bool:
 	var r := await pick_region(s, "deploy", "Schiera 1 %s in una tua Regione" % D.UNIT_NAME[u], deploy_targets(s), true, {"unit": u})
 	if r < 0:
 		return false
-	if u != "T":
+	if u == "Q":
+		cossack_pool -= 1
+	elif u != "T":
 		reserve[s][u] -= 1
 	_put(r, s, u)
 	log_msg("%s schiera 1 %s in %s." % [pname(s), D.UNIT_NAME[u], rname(r)])
@@ -1370,6 +1410,7 @@ func _resolve_battle(b: Dictionary) -> void:
 		"sup_used": {att: 0, dfn: 0}, "sup_any": {att: false, dfn: false}, "ignore_req": {}, "size0": {},
 		"winner": -1, "diff": 0, "emi": {}, "mon_nc": {}, "cap_region": reg[r]["cap"] >= 0,
 		"fal": {att: int(b.get("fallen", 0)), dfn: int(reg[r]["fallen"])}, "fz": {}, "retreat_to": {},
+		"played": {att: [], dfn: []},
 	}
 	bt["fal0"] = bt["fal"].duplicate()
 	battle = bt
@@ -1391,6 +1432,8 @@ func _resolve_battle(b: Dictionary) -> void:
 	# prima della battaglia
 	for s in [att, dfn]:
 		await _before_battle(s)
+	if exp_cos:
+		await _cos_before_battle()
 	# Emissari presenti in Battaglia
 	if exp_emi:
 		for s in [att, dfn]:
@@ -1454,6 +1497,8 @@ func _resolve_battle(b: Dictionary) -> void:
 	bt["post"] = snap
 	if exp_echo:
 		await _fallen_gain(bt, loser)
+	if exp_cos:
+		await _cos_after_battle(bt, winner)
 	stats[winner]["won"] += 1
 	stats[loser]["lost"] += 1
 	await _after_battle_cards(att)
@@ -1503,10 +1548,13 @@ func strength(s: int) -> int:
 		return 0
 	var t: int = battle["bonus"][s]
 	var zero: bool = battle.has("fz") and battle["fz"].has(s)
+	var blank: bool = exp_cos and cos_has(s, "blank")
 	for d in battle["dice"][s]:
 		if zero and d["t"] == "C":
 			continue
 		t += int(d["v"])
+		if blank and d["t"] == "Q" and int(d["v"]) == 0:
+			t += 1
 	return t
 
 
@@ -1753,6 +1801,8 @@ func _dice_items(s: int, change := true) -> Array:
 	for i in battle["dice"][s].size():
 		if lock and battle["dice"][s][i]["t"] == "C":
 			continue
+		if change and battle["dice"][s][i].get("used", false):
+			continue
 		items.append([s, i])
 	return items
 
@@ -1954,6 +2004,8 @@ func _battle_phase(s: int) -> void:
 				"sri":
 					if not hand[s].is_empty() and not sface.is_empty():
 						opts.append({"label": "Abilità del Titano: scarta 1 Carta Supporto e prendine 1 scoperta", "k": "titan"})
+		if _cos_reroll_die(s) >= 0:
+			opts.append({"label": "Potenziamento dei Cosacchi: usa un Dado Cosacco da 1 per ritirare un altro tuo Dado", "k": "cos_reroll"})
 		if not _mon_nc_cards(s).is_empty():
 			opts.append({"label": "Monumento Municipio: gioca gratis 1 delle prime 3 Carte Nazione del mazzo", "k": "mon_nc"})
 		if has_titan(s) and can_adv(s, "die_k") and can_roll(s, "K"):
@@ -1974,6 +2026,7 @@ func _battle_phase(s: int) -> void:
 				var p: Dictionary = op["play"]
 				for c in p["cards"]:
 					discard_support(s, c)
+				battle["played"][s].append_array(p["cards"])
 				battle["sup_used"][s] += p["cards"].size()
 				battle["sup_any"][s] = true
 				if p["ign"]:
@@ -2026,6 +2079,14 @@ func _battle_phase(s: int) -> void:
 						log_msg("Il Bogatyr di %s fa ritirare un Dado di %s: %d." % [pname(s), pname(it[0]), battle["dice"][it[0]][it[1]]["v"]])
 			"mon_nc":
 				await _mon_town_sri(s)
+			"cos_reroll":
+				var qi := _cos_reroll_die(s)
+				battle["dice"][s][qi]["used"] = true
+				var its := _dice_items(s).filter(func(it): return it[1] != qi)
+				var sel := await pick_dice(s, "reroll", "Scegli 1 Dado da ritirare (il Dado Cosacco resta da parte)", its, 1, 1)
+				for it in sel:
+					_reroll(s, it[1])
+					log_msg("%s usa un Dado Cosacco per ritirare un Dado: %d." % [pname(s), battle["dice"][s][it[1]]["v"]])
 			"adv_reroll":
 				_pay_adv(s, "reroll_any")
 				var sel := await pick_dice(s, "reroll", "Scegli i Dadi da ritirare", _dice_items(s), 1, 99)
@@ -2175,7 +2236,7 @@ func _apply_outcome(bt: Dictionary, winner: int, loser: int, diff: int) -> void:
 			cnt += left[t]
 		var had_fire: bool = reg[r]["fire"] == dfn
 		reg[r]["fire"] = -1
-		reg[r]["n"] = {"F": 0, "K": 0, "A": 0, "T": 0}
+		reg[r]["n"] = {"F": 0, "K": 0, "A": 0, "T": 0, "Q": 0}
 		reg[r]["own"] = -1
 		var emi_here: bool = exp_emi and not emi[dfn].is_empty() and emi[dfn]["r"] == r
 		var fd: int = reg[r]["fallen"]
@@ -3537,6 +3598,11 @@ func _fallen_gain(bt: Dictionary, loser: int) -> void:
 
 ## Le Unità Cadute lasciate sole disertano e tornano nella riserva comune.
 func _fix_fallen() -> void:
+	# Cosacchi eliminati: tornano nella riserva comune
+	for p in n:
+		if int(reserve[p].get("Q", 0)) > 0:
+			cossack_pool += reserve[p]["Q"]
+			reserve[p]["Q"] = 0
 	if not exp_echo:
 		return
 	for r in regions:
@@ -3545,3 +3611,185 @@ func _fix_fallen() -> void:
 			log_msg("%d Unità Cadut%s rimast%s sol%s in %s disertano." % [g["fallen"], "a" if g["fallen"] == 1 else "e", "a" if g["fallen"] == 1 else "e", "a" if g["fallen"] == 1 else "e", rname(r)])
 			fallen_pool += g["fallen"]
 			g["fallen"] = 0
+
+
+# ---------------------------------------------------------------- Campi di Sangue: i Cosacchi
+
+func cos_has(s: int, fx: String) -> bool:
+	if not exp_cos or s < 0:
+		return false
+	for c in cos_up[s]:
+		if D.SUPPORT[c].get("cos", "") == fx:
+			return true
+	return false
+
+
+func cossacks_on_map(s: int) -> int:
+	var k := 0
+	for r in regions:
+		if reg[r]["own"] == s:
+			k += int(reg[r]["n"]["Q"])
+	return k
+
+
+func _cos_move_sources(s: int, exclude := -1) -> Array:
+	var out := []
+	for r in regions:
+		if r != exclude and reg[r]["own"] == s and reg[r]["n"]["Q"] > 0 and not q_stop.has(r) and not move_targets(s, r).is_empty():
+			out.append(r)
+	return out
+
+
+## Azioni speciali dei Cosacchi disponibili in questo turno (Fase A).
+func cos_actions(s: int) -> Array:
+	var out := []
+	if not exp_cos or cos_turn.get(s, -1) == turn_no:
+		return out
+	if not _cos_move_sources(s).is_empty():
+		out.append({"label": "Muovi 1 Cosacco di 1 Regione" + (" (2 Cosacchi diversi con il Potenziamento)" if cos_has(s, "move2") else ""), "k": "move"})
+	for c in hand[s]:
+		var fx: String = D.SUPPORT[c].get("cos", "")
+		if fx != "" and fx != "dep" and not cos_has(s, fx):
+			out.append({"label": "Potenziamento sotto la Plancia: %s" % D.COSSACK_SHORT[fx], "k": "up", "card": c, "fx": fx})
+	if cossacks_on_map(s) == 0 and cossack_pool > 0 and not controlled(s).is_empty():
+		for c in hand[s]:
+			if D.SUPPORT[c].get("cos", "") == "dep":
+				out.append({"label": "Schieramento: scarta questa carta e prendi 1 Cosacco", "k": "dep", "card": c})
+				break
+	return out
+
+
+func _cos_special(s: int) -> void:
+	var opts := cos_actions(s)
+	if opts.is_empty():
+		return
+	opts.append({"label": "Annulla", "k": ""})
+	var k := await pick(s, "cos_action", "Azione speciale dei Cosacchi", opts)
+	var op: Dictionary = opts[k]
+	if op["k"] == "":
+		return
+	cos_turn[s] = turn_no
+	match op["k"]:
+		"move":
+			var moved := await _cos_move_one(s, -1)
+			if moved >= 0 and cos_has(s, "move2"):
+				await _cos_move_one(s, moved)
+		"up":
+			var c: int = op["card"]
+			hand[s].erase(c)
+			cos_up[s].append(c)
+			log_msg("%s mette una Carta Supporto sotto la Plancia: %s" % [pname(s), D.COSSACK_FX[op["fx"]]])
+		"dep":
+			discard_support(s, op["card"])
+			await _cos_deploy(s, controlled(s))
+	changed.emit()
+
+
+func _cos_move_one(s: int, exclude: int) -> int:
+	var srcs := _cos_move_sources(s, exclude)
+	if srcs.is_empty():
+		return -1
+	var src := await pick_region(s, "cos_from", "Muovi 1 Cosacco: da quale Regione?", srcs, true, {"unit": "Q"})
+	if src < 0:
+		return -1
+	var dst := await pick_region(s, "cos_to", "Muovi il Cosacco da %s: verso quale Regione?" % rname(src), move_targets(s, src), true, {"from": src, "unit": "Q"})
+	if dst < 0:
+		return -1
+	await _move_units(s, src, dst, {"Q": 1})
+	return dst
+
+
+func _cos_deploy(s: int, rs: Array) -> void:
+	if rs.is_empty() or cossack_pool <= 0:
+		return
+	var r: int = rs[0]
+	if rs.size() > 1:
+		r = await pick_region(s, "q_place", "Schieramento dei Cosacchi: in quale tua Regione?", rs, false, {"unit": "Q"})
+	_put(r, s, "Q")
+	cossack_pool -= 1
+	log_msg("%s schiera 1 Cosacco in %s." % [pname(s), rname(r)])
+	_fx("deploy", {"seat": s, "t": "Q", "r": r})
+
+
+func _cos_before_battle() -> void:
+	var att: int = battle["att"]
+	for s in [att, battle["def"]]:
+		if army_count(s, "Q") <= 0:
+			continue
+		if s == att and cos_has(s, "small") and army_size(s) < army_size(other(s)):
+			draw_support(s, 1, true)
+			log_msg("Potenziamento dei Cosacchi: %s pesca 1 Carta Supporto." % pname(s))
+		if cos_has(s, "drawdisc"):
+			draw_support(s, 1, true)
+			var dc := await pick_cards(s, "discard", "Potenziamento dei Cosacchi: scarta 1 Carta Supporto", hand[s].duplicate(), 1, 1)
+			for c in dc:
+				discard_support(s, c)
+			log_msg("Potenziamento dei Cosacchi: %s pesca e scarta 1 Carta Supporto." % pname(s))
+
+
+## Indice di un Dado Cosacco che mostra 1 e può ritirare un altro dado (Potenziamento), oppure -1.
+func _cos_reroll_die(s: int) -> int:
+	if not exp_cos or battle.is_empty() or not cos_has(s, "reroll"):
+		return -1
+	var dice: Array = battle["dice"][s]
+	if dice.size() < 2:
+		return -1
+	for i in dice.size():
+		if dice[i]["t"] == "Q" and int(dice[i]["v"]) == 1 and not dice[i].get("used", false):
+			return i
+	return -1
+
+
+func _cos_after_battle(bt: Dictionary, winner: int) -> void:
+	for s in [bt["att"], bt["def"]]:
+		var had_q: bool = int(bt["post"][s].get("Q", 0)) > 0
+		if had_q and s == winner and cos_has(s, "vp"):
+			_add_vp(s, 1, "Potenziamento dei Cosacchi")
+		if cos_has(s, "draw2"):
+			var k := 0
+			for d in bt["dice"][s]:
+				if d["t"] == "Q" and int(d["v"]) == 2:
+					k += 1
+			if k > 0:
+				draw_support(s, k, true)
+				log_msg("Potenziamento dei Cosacchi: %s pesca %d Carte Supporto." % [pname(s), k])
+		# Simbolo dei Cosacchi delle Carte Supporto giocate in questa Battaglia
+		var played: Array = (bt["played"][s] as Array).filter(func(c): return c in sdiscard and D.SUPPORT[c].has("cos"))
+		if played.is_empty():
+			continue
+		var many: bool = (bt["played"][s] as Array).size() >= 5
+		var dep_left := 1 if not had_q else 0
+		var up_left := 2 if many else 1
+		while not played.is_empty():
+			var opts := []
+			if dep_left > 0 and cossack_pool > 0 and not controlled(s).is_empty():
+				for c in played:
+					if D.SUPPORT[c]["cos"] == "dep":
+						opts.append({"label": "Schieramento dei Cosacchi: prendi 1 Cosacco", "k": "dep", "card": c})
+						break
+			if up_left > 0:
+				var seen := {}
+				for c in played:
+					var fx: String = D.SUPPORT[c]["cos"]
+					if fx != "dep" and not cos_has(s, fx) and not seen.has(fx):
+						seen[fx] = true
+						opts.append({"label": "Potenziamento sotto la Plancia: %s" % D.COSSACK_SHORT[fx], "k": "up", "card": c, "fx": fx})
+			if opts.is_empty():
+				break
+			opts.append({"label": "Nessun effetto", "k": ""})
+			var j := await pick(s, "cos_end", "Simbolo dei Cosacchi delle carte giocate in Battaglia", opts)
+			var op: Dictionary = opts[j]
+			if op["k"] == "":
+				break
+			played.erase(op["card"])
+			if op["k"] == "dep":
+				dep_left = 0
+				await _cos_deploy(s, controlled(s))
+			else:
+				sdiscard.erase(op["card"])
+				cos_up[s].append(op["card"])
+				up_left -= 1
+				log_msg("%s mette una Carta Supporto sotto la Plancia: %s" % [pname(s), D.COSSACK_FX[op["fx"]]])
+			if not many:
+				break
+	changed.emit()

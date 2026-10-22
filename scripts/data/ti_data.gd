@@ -5,9 +5,9 @@ extends RefCounted
 
 # ---------------------------------------------------------------- unità e dadi
 
-const UNITS := ["F", "K", "A", "T"]
-const UNIT_NAME := {"F": "Fanteria", "K": "Cavalleria", "A": "Artiglieria", "T": "Titano", "C": "Unità Caduta"}
-const UNIT_NAME_PL := {"F": "Fanterie", "K": "Cavallerie", "A": "Artiglierie", "T": "Titani"}
+const UNITS := ["F", "K", "A", "T", "Q"]       # Q = Cosacchi (Campi di Sangue)
+const UNIT_NAME := {"F": "Fanteria", "K": "Cavalleria", "A": "Artiglieria", "T": "Titano", "C": "Unità Caduta", "Q": "Cosacco"}
+const UNIT_NAME_PL := {"F": "Fanterie", "K": "Cavallerie", "A": "Artiglierie", "T": "Titani", "Q": "Cosacchi"}
 const FIRE_NAME := "Artiglieria di Fuoco"
 ## Unità di ogni nazione (13: 6 Fanteria, 4 Cavalleria, 2 Artiglieria, 1 Titano).
 const UNIT_COUNT := {"F": 6, "K": 4, "A": 2, "T": 1}
@@ -18,11 +18,12 @@ const DICE := {
 	"A": [1, 2, 2, 2, 3, 3],
 	"T": [1, 1, 1, 2, 3, 4],
 	"C": [2, 1, 1, 2, 0, 0],       # Dado Unità Caduta (Echi del Passato)
+	"Q": [0, 0, 1, 1, 2, 2],       # Dado Cosacco (Campi di Sangue)
 }
 ## Facce del Dado Unità Caduta con il teschio (stesso ordine di DICE["C"]).
 const FALLEN_SKULL := [true, true, false, true, false, false]
 ## Limite di dadi per giocatore in battaglia.
-const DICE_LIMIT := {"F": 3, "K": 2, "A": 1, "T": 2, "C": 5}
+const DICE_LIMIT := {"F": 3, "K": 2, "A": 1, "T": 2, "C": 5, "Q": 8}
 const MAX_ENERGY := 10
 const FORTRESSES := 3
 
@@ -168,7 +169,63 @@ const SUPPORT := [
 	{"kind": "forza", "req": ["foe", "T"]}, {"kind": "muovi", "req": ["foe", "F"]}, {"kind": "muovi", "req": ["foe", "K"]},
 	{"kind": "muovi", "req": ["foe", "A"]}, {"kind": "muovi", "req": ["foe", "T"]}, {"kind": "dado", "req": ["own", "F"]},
 	{"kind": "dado", "req": ["own", "K"]}, {"kind": "dado", "req": ["own", "A"]}, {"kind": "dado", "req": ["own", "T"]},
+	# Campi di Sangue: mazzo Supporto alternativo (indici 36-71), con il Simbolo dei Cosacchi in basso
+	{"kind": "muovi", "req": ["foe", "K"], "deck": "fb", "cos": "small"},
+	{"kind": "muovi", "req": ["foe", "A"], "deck": "fb", "cos": "blank"},
+	{"kind": "muovi", "req": ["foe", "T"], "deck": "fb", "cos": "reroll"},
+	{"kind": "muovi", "req": ["foe", "Q"], "deck": "fb", "cos": "vp"},
+	{"kind": "muovi", "req": ["foe", "F"], "deck": "fb", "cos": "move2"},
+	{"kind": "muovi", "req": ["foe", "Q"], "deck": "fb", "cos": "dep"},
+	{"kind": "muovi", "req": ["own", "Q"], "deck": "fb", "cos": "drawdisc"},
+	{"kind": "muovi", "req": ["own", "Q"], "deck": "fb", "cos": "draw2"},
+	{"kind": "dado", "req": ["own", "F"], "deck": "fb", "cos": "dep"},
+	{"kind": "dado", "req": ["own", "K"], "deck": "fb", "cos": "dep"},
+	{"kind": "dado", "req": ["own", "A"], "deck": "fb", "cos": "draw2"},
+	{"kind": "dado", "req": ["own", "T"], "deck": "fb", "cos": "move2"},
+	{"kind": "dado", "req": ["foe", "F"], "deck": "fb", "cos": "drawdisc"},
+	{"kind": "dado", "req": ["foe", "K"], "deck": "fb", "cos": "drawdisc"},
+	{"kind": "dado", "req": ["foe", "A"], "deck": "fb", "cos": "vp"},
+	{"kind": "dado", "req": ["foe", "T"], "deck": "fb", "cos": "small"},
+	{"kind": "dado", "req": ["foe", "Q"], "deck": "fb", "cos": "blank"},
+	{"kind": "dado", "req": ["foe", "Q"], "deck": "fb", "cos": "dep"},
+	{"kind": "dado", "req": ["own", "Q"], "deck": "fb", "cos": "reroll"},
+	{"kind": "dado", "req": ["own", "Q"], "deck": "fb", "cos": "move2"},
+	{"kind": "forza", "req": ["own", "F"], "deck": "fb", "cos": "vp"},
+	{"kind": "forza", "req": ["own", "K"], "deck": "fb", "cos": "blank"},
+	{"kind": "forza", "req": ["own", "A"], "deck": "fb", "cos": "dep"},
+	{"kind": "forza", "req": ["own", "T"], "deck": "fb", "cos": "dep"},
+	{"kind": "forza", "req": ["foe", "F"], "deck": "fb", "cos": "reroll"},
+	{"kind": "forza", "req": ["foe", "K"], "deck": "fb", "cos": "draw2"},
+	{"kind": "forza", "req": ["foe", "A"], "deck": "fb", "cos": "move2"},
+	{"kind": "forza", "req": ["foe", "T"], "deck": "fb", "cos": "draw2"},
+	{"kind": "forza", "req": ["own", "F"], "deck": "fb", "cos": "reroll"},
+	{"kind": "forza", "req": ["own", "K"], "deck": "fb", "cos": "small"},
+	{"kind": "forza", "req": ["own", "A"], "deck": "fb", "cos": "vp"},
+	{"kind": "forza", "req": ["own", "T"], "deck": "fb", "cos": "drawdisc"},
+	{"kind": "forza", "req": ["own", "Q"], "deck": "fb", "cos": "small"},
+	{"kind": "forza", "req": ["own", "Q"], "deck": "fb", "cos": "blank"},
+	{"kind": "forza", "req": ["foe", "Q"], "deck": "fb", "cos": "dep"},
+	{"kind": "forza", "req": ["foe", "Q"], "deck": "fb", "cos": "reroll"},
 ]
+const SUPPORT_BASE := 36
+## Simbolo dei Cosacchi delle carte di Campi di Sangue: Potenziamenti (sotto la Plancia) e Schieramento.
+const COSSACK_FX := {
+	"small": "Prima della Battaglia, se sei l'Attaccante con un'Armata più piccola che contiene Cosacchi: pesca 1 Carta Supporto. Una volta per Battaglia.",
+	"blank": "+1 Forza per ogni tuo Dado Cosacco che mostra il lato vuoto.",
+	"reroll": "Puoi usare un tuo Dado Cosacco che mostra 1 per ritirare un altro tuo Dado; il Dado Cosacco resta da parte.",
+	"vp": "Se hai Cosacchi in Battaglia e vinci: +1 PV. Una volta per Battaglia.",
+	"move2": "Fase A: l'Azione speciale «Muovi 1 Cosacco» muove 2 Cosacchi diversi di 1 Regione ciascuno. Una volta per turno.",
+	"drawdisc": "Se hai Cosacchi in Battaglia: prima della Battaglia pesca 1 Carta Supporto e poi scartane 1. Una volta per Battaglia.",
+	"draw2": "Dopo la Battaglia: pesca 1 Carta Supporto per ogni tuo Dado Cosacco che mostra 2.",
+	"dep": "Schieramento dei Cosacchi: prendi 1 Cosacco dalla riserva comune e mettilo in una tua Regione.",
+}
+const COSSACK_SHORT := {
+	"small": "pesca 1 carta se attacchi con l'Armata più piccola", "blank": "+1 Forza per ogni Dado Cosacco vuoto",
+	"reroll": "un Dado Cosacco da 1 ritira un altro Dado", "vp": "+1 PV se vinci con i Cosacchi",
+	"move2": "l'Azione speciale muove 2 Cosacchi", "drawdisc": "pesca e scarta 1 carta prima della Battaglia",
+	"draw2": "pesca 1 carta per ogni Dado Cosacco da 2", "dep": "prendi 1 Cosacco",
+}
+const COSSACK_TOTAL := 15
 
 const SUPPORT_NAME := {"dado": "Aggiungi un Dado", "forza": "Aggiungi Forza", "muovi": "Muovi 1 Unità in Battaglia"}
 
@@ -301,6 +358,8 @@ static func support_text(i: int) -> String:
 		"dado": t += "Effetto: +1 Dado Fanteria; in coppia (2 carte «Aggiungi un Dado») +1 Dado Titano."
 		"forza": t += "Effetto: +1 Forza; in coppia +3, in tris +5."
 		"muovi": t += "Effetto: muovi 1 tua Unità da una Regione adiacente nella Battaglia e lancia il suo Dado (1 per Battaglia)."
+	if c.has("cos"):
+		t += "\nSimbolo dei Cosacchi: " + COSSACK_FX[c["cos"]]
 	return t
 
 

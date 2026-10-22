@@ -307,7 +307,7 @@ func _player_panel(s: int) -> Control:
 
 ## Monumenti, Emissario del Re e Artiglieria di Fuoco di un giocatore.
 func _expansion_row(s: int) -> Control:
-	if not (engine.exp_mon or engine.exp_emi or engine.exp_fire or engine.exp_echo):
+	if not (engine.exp_mon or engine.exp_emi or engine.exp_fire or engine.exp_echo or engine.exp_cos):
 		return null
 	var nat := engine.nat(s)
 	var hb := HBoxContainer.new()
@@ -356,6 +356,17 @@ func _expansion_row(s: int) -> Control:
 			if ev is InputEventMouseButton and ev.pressed and ev.button_index == MOUSE_BUTTON_LEFT:
 				_zoom_card(ft, ftxt))
 		hb.add_child(fr)
+	if engine.exp_cos:
+		for c in engine.cos_up[s]:
+			var ct := UI.support_tex(c)
+			var cr := UI.icon_rect(ct, Vector2(24, 36))
+			cr.mouse_filter = Control.MOUSE_FILTER_STOP
+			var ctxt: String = "Potenziamento dei Cosacchi: " + D.COSSACK_FX[D.SUPPORT[c]["cos"]]
+			cr.tooltip_text = ctxt
+			cr.gui_input.connect(func(ev):
+				if ev is InputEventMouseButton and ev.pressed and ev.button_index == MOUSE_BUTTON_LEFT:
+					_zoom_card(ct, ctxt))
+			hb.add_child(cr)
 	var col := VBoxContainer.new()
 	col.add_theme_constant_override("separation", 0)
 	hb.add_child(col)
@@ -843,7 +854,7 @@ func _show_pick(req: Dictionary) -> void:
 			b.disabled = true
 		if o.has("order"):
 			b.text = engine.order_label(o["order"])
-		if o.has("card") and ctx in ["draw", "reinf_draw", "take_faceup"] and int(o["card"]) >= 0:
+		if o.has("card") and ctx in ["draw", "reinf_draw", "take_faceup", "cos_action", "cos_end"] and int(o["card"]) >= 0:
 			b.icon = UI.support_tex(o["card"])
 			b.expand_icon = true
 			b.custom_minimum_size = Vector2(200, 92)

@@ -8,8 +8,8 @@ extends RefCounted
 ## In battaglia calcola quanta Forza serve e spende le risorse più economiche per arrivarci.
 
 const D = preload("res://scripts/data/ti_data.gd")
-const EDIE := {"F": 0.667, "K": 1.5, "A": 2.167, "T": 2.0, "C": 1.0}
-const UNIT_VAL := {"F": 1.0, "K": 1.5, "A": 1.8, "T": 3.0}
+const EDIE := {"F": 0.667, "K": 1.5, "A": 2.167, "T": 2.0, "C": 1.0, "Q": 1.0}
+const UNIT_VAL := {"F": 1.0, "K": 1.5, "A": 1.8, "T": 3.0, "Q": 1.0}
 
 var level := 1
 var exp := ""          # varianti sperimentali (prove con tests/sim.gd)
@@ -127,6 +127,7 @@ func army_power(cnt: Dictionary) -> float:
 	p += mini(cnt.get("K", 0), 2) * EDIE["K"]
 	p += mini(cnt.get("A", 0), 1) * EDIE["A"]
 	p += mini(cnt.get("T", 0), 1) * EDIE["T"]
+	p += mini(cnt.get("Q", 0), 8) * EDIE["Q"]
 	return p
 
 
@@ -186,11 +187,11 @@ func _nat_bonus(nt: String, c: Dictionary) -> float:
 
 ## Distribuzione della somma dei dadi di un'armata (limite di dadi compreso).
 func _dist(c: Dictionary) -> Dictionary:
-	var key := "%d%d%d%d" % [mini(c.get("F", 0), 3), mini(c.get("K", 0), 2), mini(c.get("A", 0), 1), mini(c.get("T", 0), 1)]
+	var key := "%d%d%d%d%d" % [mini(c.get("F", 0), 3), mini(c.get("K", 0), 2), mini(c.get("A", 0), 1), mini(c.get("T", 0), 1), mini(c.get("Q", 0), 8)]
 	if _dist_cache.has(key):
 		return _dist_cache[key]
 	var d := {0: 1.0}
-	for t in ["F", "K", "A", "T"]:
+	for t in ["F", "K", "A", "T", "Q"]:
 		for i in mini(c.get(t, 0), D.DICE_LIMIT[t] if t != "T" else 1):
 			var nd := {}
 			for v in d:
@@ -236,7 +237,7 @@ class Sim:
 		return -1
 
 	func _size(c: Dictionary) -> int:
-		return c["F"] + c["K"] + c["A"] + c["T"]
+		return c["F"] + c["K"] + c["A"] + c["T"] + c.get("Q", 0)
 
 	func dup() -> Sim:
 		var o := Sim.new()
@@ -274,7 +275,7 @@ func make_sim(eng) -> Sim:
 		sm.hand.append(eng.hand[s].size())
 	sm.titan = eng.titan.duplicate()
 	for b in eng.battles:
-		var c := {"F": 0, "K": 0, "A": 0, "T": 0}
+		var c := {"F": 0, "K": 0, "A": 0, "T": 0, "Q": 0}
 		for u in b["u"]:
 			c[u["t"]] += 1
 		sm.battles.append({"r": b["r"], "att": b["att"], "cnt": c, "src": b["u"][0]["from"] if not b["u"].is_empty() else -1})
@@ -295,7 +296,7 @@ func sim_move(eng, sm: Sim, s: int, src: int, dst: int, cnt: Dictionary) -> void
 				b["cnt"][t] += cnt[t]
 			return
 	if enemy:
-		var full := {"F": 0, "K": 0, "A": 0, "T": 0}
+		var full := {"F": 0, "K": 0, "A": 0, "T": 0, "Q": 0}
 		for t in cnt:
 			full[t] += cnt[t]
 		sm.battles.append({"r": dst, "att": s, "cnt": full, "src": src})
@@ -491,10 +492,10 @@ func _candidates(eng, sm: Sim, s: int, a: String) -> Array:
 
 
 func _take_best(c: Dictionary, k: int) -> Dictionary:
-	var out := {"F": 0, "K": 0, "A": 0, "T": 0}
+	var out := {"F": 0, "K": 0, "A": 0, "T": 0, "Q": 0}
 	var left := k
-	for t in ["T", "A", "K", "F"]:
-		var m: int = mini(left, c[t])
+	for t in ["T", "A", "K", "F", "Q"]:
+		var m: int = mini(left, c.get(t, 0))
 		out[t] = m
 		left -= m
 	return out
@@ -868,6 +869,8 @@ func _pick(eng, s: int, req: Dictionary) -> int:
 					return i
 				if opts[i]["action"] == "_mon_build" and ai_build_pick(eng, s) >= 0:
 					return i
+				if opts[i]["action"] == "_cos" and ai_cos_pick(eng, s, eng.cos_actions(s)) >= 0:
+					return i
 			if plan.is_empty():
 				return opts.size() - 1
 			var nxt: Dictionary = plan[0]
@@ -996,6 +999,21 @@ func _pick(eng, s: int, req: Dictionary) -> int:
 			return 1 if opts.size() > 1 and int(req.get("under", 0)) >= 2 else 0
 		"mon_nc_pick":
 			return 0
+		"cos_action":
+			var c := ai_cos_pick(eng, s, opts)
+			return c if c >= 0 else opts.size() - 1
+		"cos_end":
+			var best := opts.size() - 1
+			var bv := 0.0
+			for i in opts.size():
+				var v := 0.0
+				match opts[i]["k"]:
+					"dep": v = 1.5
+					"up": v = COS_UP_VALUE.get(opts[i]["fx"], 0.5)
+				if v > bv:
+					bv = v
+					best = i
+			return best
 		"before_battle":
 			return _before_battle(eng, s, opts)
 		"battle":
@@ -1127,7 +1145,16 @@ func _region(eng, s: int, req: Dictionary) -> int:
 						step = {"mon_dst": a}
 						return r
 			return -1
-		"mon_move_to", "spass_to":
+		"q_place":
+			return _best_deploy(eng, s, allowed, "Q")
+		"cos_from":
+			for r in allowed:
+				for a in eng.move_targets(s, r):
+					if eng.owner(a) == -1:
+						step = {"mon_dst": a}
+						return r
+			return -1
+		"mon_move_to", "spass_to", "cos_to":
 			if step.has("mon_dst") and step["mon_dst"] in allowed:
 				var d: int = step["mon_dst"]
 				step = {}
@@ -1281,6 +1308,10 @@ func _battle(eng, s: int, opts: Array) -> int:
 	for i in opts.size():
 		if opts[i]["k"] == "mon_nc":
 			return i
+		if opts[i]["k"] == "cos_reroll":
+			for d in eng.battle["dice"][s]:
+				if d["t"] in ["T", "A", "K"] and int(d["v"]) == (D.DICE[d["t"]] as Array).min():
+					return i
 	var cur: int = eng.strength(s)
 	var need := _need(eng, s)
 	var end_i := opts.size() - 1
@@ -1445,3 +1476,32 @@ func ai_build_pick(eng, s: int) -> int:
 			bv = v
 			best = i
 	return best
+
+
+const COS_UP_VALUE := {"blank": 1.2, "reroll": 1.0, "vp": 1.0, "draw2": 0.8, "small": 0.6, "drawdisc": 0.5, "move2": 0.3}
+
+
+## Azione speciale dei Cosacchi: schieramento se non ne ha, poi un buon Potenziamento, poi un movimento
+## verso una Regione libera. Restituisce l'indice dell'opzione o -1.
+func ai_cos_pick(eng, s: int, opts: Array) -> int:
+	for i in opts.size():
+		if opts[i]["k"] == "dep":
+			return i
+	var best := -1
+	var bv := 0.55
+	if eng.hand[s].size() >= 3:
+		for i in opts.size():
+			if opts[i]["k"] == "up":
+				var v: float = COS_UP_VALUE.get(opts[i]["fx"], 0.4)
+				if v > bv:
+					bv = v
+					best = i
+	if best >= 0:
+		return best
+	for i in opts.size():
+		if opts[i]["k"] == "move":
+			for r in eng._cos_move_sources(s):
+				for a in eng.move_targets(s, r):
+					if eng.owner(a) == -1:
+						return i
+	return -1

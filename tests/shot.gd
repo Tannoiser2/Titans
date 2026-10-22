@@ -73,7 +73,7 @@ func _run() -> void:
 		seats[1]["automa"] = true
 		seats[1]["name"] = "Automa"
 	main.start_game({"seats": seats, "scenario": scen, "seed": 42, "ai_delay": 0.0, "advanced": mode == "adv", "solo": mode == "solo", "automa_adv": true,
-		"monuments": mode == "xp", "emissaries": mode == "xp", "fire": mode == "xp", "echoes": mode == "xp"})
+		"monuments": mode == "xp", "emissaries": mode == "xp", "fire": mode == "xp", "echoes": mode == "xp", "fields": mode == "xp"})
 	await wait(30)
 	await shot("inizio")
 	# risponde con l'IA alle decisioni umane fino a una battaglia
@@ -89,7 +89,7 @@ func _run() -> void:
 			continue
 		var e: TIEngine = g.engine
 		var key := "%s_%s" % [req["type"], req.get("ctx", "")]
-		if not shots_taken.has(key) and key in ["pick_order", "region_move_to", "pick_battle", "cards_pay", "pick_buy_start", "pick_objective", "region_deploy", "pick_action", "pick_mon_build", "pick_emi_token", "pick_fire", "pick_mon_menu", "pick_echo_card", "pick_battle"]:
+		if not shots_taken.has(key) and key in ["pick_order", "region_move_to", "pick_battle", "cards_pay", "pick_buy_start", "pick_objective", "region_deploy", "pick_action", "pick_mon_build", "pick_emi_token", "pick_fire", "pick_mon_menu", "pick_echo_card", "pick_cos_action", "pick_cos_end"]:
 			shots_taken[key] = true
 			await shot(key)
 		if e.round_no >= 2 and not shots_taken.has("round2"):

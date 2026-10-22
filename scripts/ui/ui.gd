@@ -171,8 +171,8 @@ static func primary(b: Button) -> Button:
 
 ## Dado disegnato: colore per tipo, pallini pari al valore (0 = faccia vuota).
 static func draw_die(ci: CanvasItem, rect: Rect2, t: String, v: int, selected := false, dim := false, skull := false, zero := false) -> void:
-	var bg: Color = {"F": Color("#e9dcc0"), "K": Color("#c79a5a"), "A": Color("#8f969e"), "T": Color("#7e1f1f"), "C": Color("#5b3a8c")}[t]
-	var pip: Color = Color("#f6ecd6") if t in ["T", "C"] else Color("#1d1712")
+	var bg: Color = {"F": Color("#e9dcc0"), "K": Color("#c79a5a"), "A": Color("#8f969e"), "T": Color("#7e1f1f"), "C": Color("#5b3a8c"), "Q": Color("#6d7078")}[t]
+	var pip: Color = Color("#f6ecd6") if t in ["T", "C", "Q"] else Color("#1d1712")
 	if zero:
 		bg = bg.darkened(0.35)
 	if dim:

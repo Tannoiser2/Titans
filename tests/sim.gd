@@ -36,7 +36,7 @@ func _run(games: int, np: int, lvl: int, adv: bool) -> void:
 			seats[1]["name"] = "Automa"
 		var seed := int(OS.get_environment("TI_SEED") if OS.get_environment("TI_SEED") != "" else "100") + g
 		eng.setup({"seats": seats, "seed": seed, "scenario": scn["id"], "advanced": adv, "capital_capture": OS.get_environment("TI_CAP") == "1", "extended": OS.get_environment("TI_EXT") == "1", "solo": solo, "automa_adv": OS.get_environment("TI_SOLO") == "2",
-			"monuments": "m" in OS.get_environment("TI_XP"), "emissaries": "e" in OS.get_environment("TI_XP"), "fire": "f" in OS.get_environment("TI_XP"), "echoes": "c" in OS.get_environment("TI_XP")})
+			"monuments": "m" in OS.get_environment("TI_XP"), "emissaries": "e" in OS.get_environment("TI_XP"), "fire": "f" in OS.get_environment("TI_XP"), "echoes": "c" in OS.get_environment("TI_XP"), "fields": "q" in OS.get_environment("TI_XP")})
 		var tseat := 0 if solo else g % np
 		var lvl0 := int(OS.get_environment("TI_LVL0")) if OS.get_environment("TI_LVL0") != "" else lvl
 		for i in np:
@@ -78,7 +78,7 @@ func _check(eng: TIEngine) -> void:
 	if errors > 20:
 		return
 	for s in eng.n:
-		var k := {"F": 0, "K": 0, "A": 0, "T": 0}
+		var k := {"F": 0, "K": 0, "A": 0, "T": 0, "Q": 0}
 		for r in eng.regions:
 			if eng.reg[r]["own"] == s:
 				for t in TIData.UNITS:
@@ -132,6 +132,23 @@ func _check(eng: TIEngine) -> void:
 		if tb != (eng.titan[s] == "board") and eng.battle.is_empty():
 			errors += 1
 			print("ERRORE: Titano di %s: %s ma sul tabellone %d" % [eng.pname(s), eng.titan[s], k["T"]])
+	if eng.exp_cos:
+		var qk: int = eng.cossack_pool
+		for r in eng.regions:
+			qk += eng.reg[r]["n"]["Q"]
+		for p in eng.n:
+			qk += int(eng.reserve[p].get("Q", 0))
+		for b in eng.battles:
+			for u in b["u"]:
+				if u["t"] == "Q":
+					qk += 1
+		if not eng.battle.is_empty() and not eng.battle.has("post"):
+			for u in eng.battle["u_att"]:
+				if u["t"] == "Q":
+					qk += 1
+		if qk != TIData.COSSACK_TOTAL and (eng.battle.is_empty() or not eng.battle.has("outcome")):
+			errors += 1
+			print("ERRORE: %d Cosacchi in tutto (turno %d, fase %s)" % [qk, eng.turn_no, eng.phase])
 	if eng.exp_echo:
 		var fk: int = eng.fallen_pool
 		for r in eng.regions:

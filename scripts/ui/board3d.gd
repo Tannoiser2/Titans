@@ -284,6 +284,33 @@ func _fire_model(nat: String) -> Node3D:
 	return n
 
 
+## Cosacco: la Fanteria nei colori della nazione, più scura, con un berretto di pelliccia.
+func _cossack_model(nat: String) -> Node3D:
+	var n := _model("F", nat, 0.74)
+	for c in n.get_children():
+		if c is MeshInstance3D:
+			var key := "cos_" + nat
+			if not mats.has(key):
+				var m := StandardMaterial3D.new()
+				m.albedo_color = UI.ncol(nat).darkened(0.42)
+				m.roughness = 0.6
+				m.metallic = 0.25
+				m.rim_enabled = true
+				m.rim = 0.4
+				mats[key] = m
+			(c as MeshInstance3D).material_override = mats[key]
+	var hat := MeshInstance3D.new()
+	var hm := CylinderMesh.new()
+	hm.top_radius = 0.07
+	hm.bottom_radius = 0.09
+	hm.height = 0.1
+	hat.mesh = hm
+	hat.position.y = 0.76
+	hat.material_override = _mat("cos_hat", Color("#2b1d12"), 0.95, 0.0)
+	n.add_child(hat)
+	return n
+
+
 ## Unità Caduta: una Fanteria spettrale, viola e semitrasparente.
 func _fallen_model(nat: String) -> Node3D:
 	var n := _model("F", nat, 0.78)
@@ -479,14 +506,14 @@ func _build_region(r: int) -> void:
 			es.position = slots[si % slots.size()] + Vector3(0, 0.3, 0)
 			root.add_child(es)
 			si += 1
-		for t in ["T", "A", "K", "F"]:
+		for t in ["T", "A", "K", "F", "Q"]:
 			var k: int = g["n"][t]
 			if t == "A" and g.get("fire", -1) == own:
 				k -= 1
 			if k <= 0:
 				continue
-			var h: float = {"T": 1.55, "A": 0.62, "K": 0.85, "F": 0.78}[t]
-			var m := _model(t, nat, h)
+			var h: float = {"T": 1.55, "A": 0.62, "K": 0.85, "F": 0.78, "Q": 0.74}[t]
+			var m := _cossack_model(nat) if t == "Q" else _model(t, nat, h)
 			m.position = slots[si % slots.size()]
 			m.rotation_degrees.y = 200 + si * 23
 			root.add_child(m)
@@ -565,12 +592,12 @@ func _build_border(att: int, r: int, units: Array) -> void:
 		var dir := (b - a).normalized()
 		var side := Vector3(-dir.z, 0, dir.x)
 		var i := 0
-		for t in ["T", "P", "A", "K", "F"]:
+		for t in ["T", "P", "A", "K", "F", "Q"]:
 			var k: int = groups[key].get(t, 0)
 			if k <= 0:
 				continue
-			var h: float = {"T": 1.55, "P": 0.75, "A": 0.62, "K": 0.85, "F": 0.78}[t]
-			var m := _fire_model(nat) if t == "P" else _model(t, nat, h)
+			var h: float = {"T": 1.55, "P": 0.75, "A": 0.62, "K": 0.85, "F": 0.78, "Q": 0.74}[t]
+			var m := _fire_model(nat) if t == "P" else (_cossack_model(nat) if t == "Q" else _model(t, nat, h))
 			m.position = p + side * (float(i) - 0.5) * 0.42
 			m.look_at_from_position(m.position, m.position + dir * 3.0, Vector3.UP)
 			pieces.add_child(m)
