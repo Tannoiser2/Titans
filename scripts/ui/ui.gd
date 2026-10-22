@@ -180,6 +180,7 @@ static func die_face(t: String, v: int, special: bool) -> Texture2D:
 		"C": key = "C%d%s" % [v, "s" if special else ""]
 		"Q": key = "Q%d" % clampi(v, 0, 2)
 		"W": key = "Ws" if special else "W%d" % v
+		"F", "K", "A", "T": key = "%s%d" % [t, v]
 	if key == "":
 		return null
 	if not _die_tex.has(key):

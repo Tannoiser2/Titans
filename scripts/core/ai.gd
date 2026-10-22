@@ -8,7 +8,7 @@ extends RefCounted
 ## In battaglia calcola quanta Forza serve e spende le risorse più economiche per arrivarci.
 
 const D = preload("res://scripts/data/ti_data.gd")
-const EDIE := {"F": 0.667, "K": 1.5, "A": 2.167, "T": 2.0, "C": 1.0, "Q": 1.0, "W": 1.5}
+const EDIE := {"F": 0.667, "K": 1.5, "A": 2.0, "T": 2.667, "C": 1.0, "Q": 1.0, "W": 1.5}
 const UNIT_VAL := {"F": 1.0, "K": 1.5, "A": 1.8, "T": 3.0, "Q": 1.0}
 
 var level := 1

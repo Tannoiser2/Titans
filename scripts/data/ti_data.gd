@@ -15,8 +15,8 @@ const UNIT_COUNT := {"F": 6, "K": 4, "A": 2, "T": 1}
 const DICE := {
 	"F": [0, 0, 1, 1, 1, 1],
 	"K": [1, 1, 1, 2, 2, 2],
-	"A": [1, 2, 2, 2, 3, 3],
-	"T": [1, 1, 1, 2, 3, 4],
+	"A": [1, 1, 2, 2, 3, 3],
+	"T": [2, 2, 2, 3, 3, 4],
 	"C": [2, 1, 1, 2, 0, 0],       # Dado Unità Caduta (Echi del Passato)
 	"Q": [0, 0, 1, 1, 2, 2],       # Dado Cosacco (Campi di Sangue)
 	"W": [0, 0, 0, 2, 3, 4],       # Dado Spirito di Guerra: le tre facce da 0 hanno il simbolo

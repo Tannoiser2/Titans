@@ -97,7 +97,7 @@ func _rules_a() -> String:
 func _rules_b() -> String:
 	var s := ""
 	s += _h("La Battaglia")
-	s += "Ogni giocatore lancia i dadi delle sue Unità (al massimo 3 Fanteria, 2 Cavalleria, 1 Artiglieria e 1 Dado Titano per il Titano; la riserva è di 2 Dadi Titano). Dadi: Fanteria 0-0-1-1-1-1, Cavalleria 1-1-1-2-2-2, Artiglieria 1-2-2-2-3-3, Titano 1-1-1-2-3-4.\n"
+	s += "Ogni giocatore lancia i dadi delle sue Unità (al massimo 3 Fanteria, 2 Cavalleria, 1 Artiglieria e 1 Dado Titano per il Titano; la riserva è di 2 Dadi Titano). Dadi: Fanteria 0-0-1-1-1-1, Cavalleria 1-1-1-2-2-2, Artiglieria 1-1-2-2-3-3, Titano 2-2-2-3-3-4 (dai dadi della copia fisica).\n"
 	s += "Prima il Difensore, poi l'Attaccante svolgono la loro Fase Battaglia (con Fortezza o Capitale l'ordine si inverte e il Difensore pesca 1 Carta Supporto). Nella propria fase si può, quante volte si vuole:\n"
 	s += "• giocare Carte Supporto rispettandone il requisito (icona nera = la tua Armata, rossa = quella avversaria): [b]Aggiungi un Dado[/b] (1 carta: Dado Fanteria, 2 carte: Dado Titano), [b]Aggiungi Forza[/b] (+1, +3 in coppia, +5 in tris), [b]Muovi 1 Unità in Battaglia[/b] da una Regione adiacente (1 per Battaglia);\n"
 	s += "• scartare 1 Carta Supporto per ritirare quanti Dadi si vuole;\n"
