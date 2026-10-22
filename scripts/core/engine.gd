@@ -96,6 +96,15 @@ var results: Array = []
 var log_lines: Array = []
 var stats: Array = []            # per posto: battaglie vinte, perse, ...
 
+# ---- Modalità Solitario
+var solo := false
+var automa := -1                 # posto dell'Automa
+var automa_adv := false          # difficoltà Avanzata (azioni con la stella)
+var automa_deck: Array = []
+var automa_used: Array = []
+var automa_card := -1            # carta Automa in corso
+var solo_lost := false           # l'Automa ha preso la Capitale del giocatore
+
 
 # ================================================================ preparazione
 
@@ -111,9 +120,17 @@ func setup(config: Dictionary) -> void:
 	scen = D.scenario(str(config["scenario"]))
 	side = scen["side"]
 	players = []
+	solo = bool(config.get("solo", false))
+	automa = -1
+	automa_adv = bool(config.get("automa_adv", false))
 	for s in config["seats"]:
-		players.append({"nat": str(s["nat"]), "ai": bool(s["ai"]), "name": str(s["name"]), "level": int(s.get("level", 1))})
+		if bool(s.get("automa", false)):
+			automa = players.size()
+		players.append({"nat": str(s["nat"]), "ai": bool(s["ai"]) or bool(s.get("automa", false)), "name": str(s["name"]), "level": int(s.get("level", 1)), "automa": bool(s.get("automa", false))})
 	n = players.size()
+	if solo:
+		advanced = false
+		capital_capture = false
 	var md: Dictionary = D.map_data(side)
 	regions = {}
 	for r in md["regioni"]:
@@ -184,6 +201,13 @@ func setup(config: Dictionary) -> void:
 	_shuffle(objdeck)
 	odeck_src = D.ADV_ORDERS if advanced else D.ORDERS
 	first = 0
+	if solo:
+		first = automa
+		for ci in D.SOLO_REMOVE.get(nat(automa), []):
+			ndeck[automa].erase(ci)
+		automa_deck = range(D.AUTOMA_CARDS.size())
+		_shuffle(automa_deck)
+		automa_used = []
 	phase = "setup"
 	fortresses_left = D.FORTRESSES
 
@@ -496,7 +520,7 @@ func draw_support(s: int, k := 1, quiet := false) -> void:
 			log_msg("Il mazzo Supporto viene rimescolato.")
 		hand[s].append(sdeck.pop_front())
 	if not quiet and k > 0:
-		log_msg("%s pesca %d Carta%s Supporto." % [pname(s), k, "" if k == 1 else "e"])
+		log_msg("%s pesca %d %s Supporto." % [pname(s), k, "Carta" if k == 1 else "Carte"])
 
 
 func _refill_face() -> void:
@@ -579,14 +603,19 @@ func run() -> void:
 	await _initial_setup()
 	for r in rounds_total:
 		if game_over:
-			return
+			break
 		round_no = r + 1
 		await _play_round()
+		if game_over:
+			break
 		await _end_round()
 	_end_game()
 
 
 func _initial_setup() -> void:
+	if solo:
+		await _solo_setup()
+		return
 	for s in n:
 		draw_support(s, 3, true)
 	_refill_face()
@@ -627,7 +656,7 @@ func _initial_setup() -> void:
 func _setup_orders() -> void:
 	odeck = []
 	for i in odeck_src.size():
-		if int(odeck_src[i]["min"]) <= n:
+		if int(odeck_src[i]["min"]) <= n or solo:
 			odeck.append(i)
 	_shuffle(odeck)
 	odiscard = []
@@ -664,12 +693,21 @@ func _fill_next() -> void:
 	var take := mini(size, odeck.size())
 	for i in take:
 		onext.append(odeck.pop_front())
-	if n == 2 and odeck.is_empty() and take == 4:
+	if n == 2 and odeck.is_empty() and take == 4 and not solo:
 		onext_hidden = 1       # regola 3+1
 
 
 func _after_pick() -> void:
 	# chiamata dopo che un giocatore ha scelto una carta dall'area
+	if solo:
+		# Solitario: dopo la scelta del giocatore le 2 carte rimaste si scartano e arrivano gli Ordini Successivi
+		for c in oarea:
+			odiscard.append(c)
+		oarea = []
+		if not onext.is_empty():
+			oarea = onext
+			_fill_next()
+		return
 	area_picks -= 1
 	if area_hidden > 0:
 		area_hidden -= 1
@@ -709,7 +747,10 @@ func _play_round() -> void:
 	active = first
 	changed.emit()
 	while not oarea.is_empty() and not game_over:
-		await _turn(active)
+		if solo and active == automa:
+			await _automa_turn(active)
+		else:
+			await _turn(active)
 		active = (active + 1) % n
 
 
@@ -1023,6 +1064,10 @@ func _capital_taken(s: int, r: int, by_battle: bool) -> void:
 		_add_vp(s, 3, "Capitale distrutta")
 		log_msg("%s distrugge la Capitale di %s in %s!" % [pname(s), pname(c), rname(r)])
 	_fx("capital", {"r": r})
+	if solo and s == automa and c != automa:
+		solo_lost = true
+		game_over = true
+		log_msg("L'Automa ha conquistato la tua Capitale: la partita è persa.")
 
 
 func _add_vp(s: int, k: int, why: String) -> void:
@@ -2108,7 +2153,10 @@ func _end_round() -> void:
 	log_msg("— Fine del Round %d —" % round_no)
 	for s in n:
 		var k := controlled(s).size()
-		_add_vp(s, k, "%d Regioni controllate" % k)
+		if solo and s == automa:
+			_add_vp(s, 2 * k, "%d Regioni controllate, 2 PV ciascuna" % k)
+		else:
+			_add_vp(s, k, "%d Regioni controllate" % k)
 	changed.emit()
 	if round_no >= rounds_total:
 		return
@@ -2120,8 +2168,17 @@ func _end_round() -> void:
 		for c in nowned[s]:
 			c["rot"] = false
 	round_no += 1      # gli sconti del Rinforzo valgono per il round successivo
+	var reinf_order := []
 	for i in n:
-		var s := (first + i) % n
+		reinf_order.append((first + i) % n)
+	if solo:
+		reinf_order = [1 - automa, automa]       # l'Automa sceglie per secondo
+	for s in reinf_order:
+		if solo and s == automa:
+			draw_support(s, 2)
+			_automa_buy(s)
+			changed.emit()
+			continue
 		# 1° Rinforzo
 		var o1 := [{"label": "Prendi 2 Carte Supporto", "k": "sup"}, {"label": "Pesca 2 Obiettivi Segreti e tienine 1", "k": "obj"}]
 		var k1 := await pick(s, "reinf1", "Rinforzi — 1° Rinforzo", o1)
@@ -2179,6 +2236,17 @@ func _end_game() -> void:
 	game_over = true
 	phase = "over"
 	results = []
+	if solo:
+		var me := 1 - automa
+		var win: bool = not solo_lost and vp[me] > vp[automa]
+		for s in [me, automa]:
+			results.append({"seat": s, "vp": vp[s], "regions": controlled(s).size(), "units": units_on_board(s), "first": 0, "solo_win": win})
+		if not win:
+			results.reverse()
+		log_msg("Partita finita: %s" % ("hai sconfitto l'Automa!" if win else "ha vinto l'Automa."))
+		changed.emit()
+		game_ended.emit(results)
+		return
 	for s in n:
 		results.append({"seat": s, "vp": vp[s], "regions": controlled(s).size(), "units": units_on_board(s), "first": 1 if s == first else 0})
 	results.sort_custom(func(a, b):
@@ -2192,3 +2260,288 @@ func _end_game() -> void:
 	log_msg("Partita finita! Vince %s con %d PV." % [pname(results[0]["seat"]), results[0]["vp"]])
 	changed.emit()
 	game_ended.emit(results)
+
+
+# ================================================================ Modalità Solitario: l'Automa
+
+func _solo_setup() -> void:
+	var me := 1 - automa
+	draw_support(me, 3, true)
+	draw_support(automa, 3, true)
+	_refill_face()
+	changed.emit()
+	await buy_nation_card(me, 0, "buy_start")
+	_automa_buy(automa)
+	# Carte Missione (Obiettivi Segreti): se ne pescano 2 e se ne tiene 1, fino ad averne 3
+	for k in 3:
+		var two := [objdeck.pop_front(), objdeck.pop_front()]
+		var opts := []
+		for o in two:
+			opts.append({"label": "%s (%d PV)" % [D.OBJECTIVES[o]["text"], D.OBJECTIVES[o]["vp"]], "obj": o})
+		var j := await pick(me, "objective", "Scegli un Obiettivo Segreto da tenere (%d di 3)" % (k + 1), opts)
+		obj_hand[me].append(two[j])
+		objdeck.append(two[1 - j])
+	log_msg("Hai scelto 3 Obiettivi Segreti. L'Automa (%s) gioca %s." % [D.NATIONS[nat(automa)]["name"], "a livello Avanzato" if automa_adv else "a livello Base"])
+	phase = "play"
+	changed.emit()
+
+
+## L'Automa acquista una Carta Nazione: rivela la prima del suo mazzo e paga con le Carte Supporto dal fondo
+## della sua pila; se non può pagare la mette in fondo al mazzo e pesca 1 Carta Supporto.
+func _automa_buy(s: int) -> void:
+	if ndeck[s].is_empty():
+		return
+	var ci: int = ndeck[s][0]
+	var cost := maxi(0, int(D.NATION_CARDS[nat(s)][ci]["cost"]) - discount(round_no))
+	if hand[s].size() >= cost:
+		for i in cost:
+			sdiscard.append(hand[s].pop_front())
+		ndeck[s].pop_front()
+		nowned[s].append({"i": ci, "rot": false})
+		log_msg("L'Automa acquista una Carta Nazione: %s" % D.nation_card_text(nat(s), ci))
+	else:
+		ndeck[s].pop_front()
+		ndeck[s].append(ci)
+		draw_support(s, 1, true)
+		log_msg("L'Automa non può pagare la Carta Nazione: la mette in fondo al mazzo e pesca 1 Carta Supporto.")
+	changed.emit()
+
+
+func _automa_turn(s: int) -> void:
+	turn_no += 1
+	attacked_this_turn = []
+	battles = []
+	battles_started = 0
+	turn_abilities = {}
+	if automa_deck.is_empty():
+		automa_deck = automa_used
+		automa_used = []
+		_shuffle(automa_deck)
+	automa_card = automa_deck.pop_front()
+	automa_used.append(automa_card)
+	var card: Dictionary = D.AUTOMA_CARDS[automa_card]
+	log_msg("Turno dell'Automa: pesca una carta Automa.")
+	phase = "orders"
+	changed.emit()
+	var acts: Array = (card["a"] as Array).duplicate()
+	if automa_adv:
+		acts.append_array(card["adv"])
+	for act in acts:
+		if game_over:
+			return
+		await _automa_action(s, act)
+		changed.emit()
+		if ai_delay > 0.0 and not headless and is_inside_tree():
+			await get_tree().create_timer(ai_delay * 0.7).timeout
+	phase = "battles"
+	battles_started = battles.size()
+	while not battles.is_empty() and not game_over:
+		var b: Dictionary = battles.pop_front()
+		await _resolve_battle(b)
+		_check_objectives_all()
+	if game_over:
+		return
+	phase = "draw"
+	draw_support(s, 1, true)
+	phase = "reset"
+	while hand[s].size() > HAND_LIMIT:
+		sdiscard.append(hand[s].pop_front())
+	if titan[s] != "board":
+		var best := -1
+		for r in regions:
+			if reg[r]["own"] == s and units_total(r) > 0 and (best < 0 or units_total(r) > units_total(best)):
+				best = r
+		if best < 0 and is_capital_of(_capital_region(s), s):
+			best = _capital_region(s)
+		if best > 0:
+			_put(best, s, "T")
+			log_msg("Il Titano dell'Automa torna in campo in %s." % rname(best))
+			_fx("deploy", {"seat": s, "t": "T", "r": best})
+	# scarta la Carta Ordini indicata (I–IV)
+	if not oarea.is_empty():
+		var idx := clampi(int(card["d"]) - 1, 0, oarea.size() - 1)
+		var oc: int = oarea[idx]
+		oarea.remove_at(idx)
+		odiscard.append(oc)
+		log_msg("L'Automa scarta la Carta Ordini in posizione %s: %s." % [["I", "II", "III", "IV"][clampi(int(card["d"]) - 1, 0, 3)], order_label(oc)])
+	_check_objectives_all()
+	phase = "play"
+	changed.emit()
+
+
+func _capital_region(s: int) -> int:
+	for r in regions:
+		if reg[r]["cap"] == s:
+			return r
+	return -1
+
+
+func _automa_armies(s: int) -> Array:
+	var out := []
+	for r in regions:
+		if reg[r]["own"] == s and units_total(r) > 0:
+			out.append(r)
+	return out
+
+
+## Regola del Fronte di Battaglia: la regione adiacente al maggior numero di regioni del giocatore, poi a più
+## regioni libere, poi a caso.
+func _front_pick(cands: Array, s: int) -> int:
+	if cands.is_empty():
+		return -1
+	var me := 1 - s
+	var best := []
+	var bk := [-1, -1]
+	for r in cands:
+		var a := 0
+		var f := 0
+		for x in adj(r):
+			if owner(x) == me:
+				a += 1
+			if units_total(x) == 0:
+				f += 1
+		var k := [a, f]
+		if k[0] > bk[0] or (k[0] == bk[0] and k[1] > bk[1]):
+			bk = k
+			best = [r]
+		elif k == bk:
+			best.append(r)
+	return best[rng.randi() % best.size()]
+
+
+func _automa_army(s: int, target: String) -> int:
+	var armies := _automa_armies(s)
+	var c := []
+	match target:
+		"big", "small":
+			var ext := -1
+			for r in armies:
+				var k := units_total(r)
+				if ext < 0 or (k > ext if target == "big" else k < ext):
+					ext = k
+			for r in armies:
+				if units_total(r) == ext:
+					c.append(r)
+		"arty":
+			c = armies.filter(func(r): return reg[r]["n"]["A"] > 0)
+		"titan":
+			c = armies.filter(func(r): return reg[r]["n"]["T"] > 0)
+	return _front_pick(c, s)
+
+
+func _automa_action(s: int, act: Array) -> void:
+	var kind: String = act[0]
+	var target: String = act[1]
+	match kind:
+		"buy":
+			_automa_buy(s)
+		"rec_F", "rec_X":
+			var r := -1
+			match target:
+				"small":
+					r = _automa_army(s, "small")
+				"capA":
+					var cr := _capital_region(s)
+					if cr > 0 and owner(cr) == s:
+						r = cr
+				"free":
+					r = _front_pick(controlled(s).filter(func(x): return units_total(x) == 0), s)
+			if r < 0:
+				log_msg("L'Automa non può eseguire: %s." % D.automa_action_text(act))
+				return
+			var u := ""
+			if kind == "rec_F":
+				u = "F" if reserve[s]["F"] > 0 else ""
+			else:
+				for t in ["A", "K", "F"]:
+					if reserve[s][t] > 0:
+						u = t
+						break
+			if u == "":
+				log_msg("L'Automa non ha Unità da reclutare.")
+				return
+			reserve[s][u] -= 1
+			_put(r, s, u)
+			log_msg("L'Automa recluta 1 %s in %s." % [D.UNIT_NAME[u], rname(r)])
+			_fx("deploy", {"seat": s, "t": u, "r": r})
+		"cap", "exp":
+			var src := _automa_army(s, target)
+			if src < 0:
+				log_msg("L'Automa non può eseguire: %s." % D.automa_action_text(act))
+				return
+			# limite dei Segnalini Controllo: con tutti e 7 piazzati non lascia regioni scoperte
+			if tokens_used(s) >= TOKENS and not is_capital_of(src, s):
+				log_msg("L'Automa ha finito i Segnalini Controllo: non muove l'Armata da %s." % rname(src))
+				return
+			var dst := _automa_dest(s, src, kind == "cap")
+			if dst < 0:
+				log_msg("L'Automa non può eseguire: %s." % D.automa_action_text(act))
+				return
+			var cnt := {}
+			for t in D.UNITS:
+				if reg[src]["n"][t] > 0:
+					cnt[t] = reg[src]["n"][t]
+			_move_units(s, src, dst, cnt)
+
+
+func _dist_from(start: int) -> Dictionary:
+	var dist := {start: 0}
+	var q := [start]
+	while not q.is_empty():
+		var r: int = q.pop_front()
+		for a in adj(r):
+			if not dist.has(a):
+				dist[a] = dist[r] + 1
+				q.append(a)
+	return dist
+
+
+## Destinazione del movimento dell'Automa (verso la Capitale del giocatore o d'Espansione).
+func _automa_dest(s: int, src: int, to_capital: bool) -> int:
+	var me := 1 - s
+	var cands := move_targets(s, src)
+	if to_capital:
+		var cr := _capital_region(me)
+		if cr < 0:
+			return -1
+		var dist := _dist_from(cr)
+		if not dist.has(src):
+			return -1
+		cands = cands.filter(func(x): return dist.has(x) and dist[x] < dist[src])
+	# limite d'Armata: niente armate oltre il limite dei dadi (3 Fanterie, 2 Cavallerie, 1 Artiglieria)
+	var moving: Dictionary = reg[src]["n"]
+	var ok := cands.filter(func(x):
+		var merge: bool = reg[x]["own"] == s
+		for t in ["F", "K", "A"]:
+			var k: int = moving[t] + (reg[x]["n"][t] if merge else 0)
+			if k > int(D.DICE_LIMIT[t]) and k > moving[t]:
+				return false
+		return true)
+	# priorità: 1 regione libera del giocatore, 2 regione libera non controllata,
+	# 3 regione con l'Armata più piccola del giocatore, 4 regione con l'Armata più piccola dell'Automa
+	for rank in 4:
+		var group := []
+		var ext := 999
+		for x in ok:
+			var u := units_total(x)
+			var o := owner(x)
+			var hit := false
+			match rank:
+				0: hit = u == 0 and o == me
+				1: hit = u == 0 and o == -1
+				2: hit = u > 0 and reg[x]["own"] == me
+				3: hit = u > 0 and reg[x]["own"] == s
+			if not hit:
+				continue
+			if rank >= 2:
+				if u < ext:
+					ext = u
+					group = [x]
+				elif u == ext:
+					group.append(x)
+			else:
+				group.append(x)
+		if not group.is_empty():
+			return _front_pick(group, s)
+	return -1
+

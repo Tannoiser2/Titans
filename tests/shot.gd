@@ -41,12 +41,24 @@ func _run() -> void:
 		await shot("regole")
 		quit()
 		return
-	var scen: String = {"game4": "4-2B", "game5": "5-2", "hre": "I2-1"}.get(mode, "2-1A")
+	if mode == "solomenu":
+		main.current.nplayers = 1
+		main.current.scen_id = "S1"
+		main.current._refresh_scen()
+		main.current._refresh_seats()
+		await wait(5)
+		await shot("menu_solo")
+		quit()
+		return
+	var scen: String = {"game4": "4-2B", "game5": "5-2", "hre": "I2-1", "solo": "S1"}.get(mode, "2-1A")
 	var seats := []
 	for c in TIData.scenario(scen)["nations"]:
 		var nt: String = TIData.CODE_TO_NATION[c]
 		seats.append({"nat": nt, "ai": seats.size() > 0, "name": "Stefano" if seats.is_empty() else TIData.NATIONS[nt]["short"], "level": 1})
-	main.start_game({"seats": seats, "scenario": scen, "seed": 42, "ai_delay": 0.0, "advanced": mode == "adv"})
+	if mode == "solo":
+		seats[1]["automa"] = true
+		seats[1]["name"] = "Automa"
+	main.start_game({"seats": seats, "scenario": scen, "seed": 42, "ai_delay": 0.0, "advanced": mode == "adv", "solo": mode == "solo", "automa_adv": true})
 	await wait(30)
 	await shot("inizio")
 	# risponde con l'IA alle decisioni umane fino a una battaglia

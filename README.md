@@ -18,6 +18,9 @@ copia fisica e dal modulo Tabletop Simulator.
   Impero Ottomano e, con l'espansione 5ª Nazione, il Sacro Romano Impero (partite fino a 5 giocatori, mazzo di 20 Ordini).
 - **Modalità di gioco**: Modalità Avanzata (Ordini Avanzati, Energia, scambio degli Ordini, abilità avanzate del
   Titano), Presa della Capitale, Partita estesa a 4 Round.
+- **Modalità Solitario contro l'Automa** (Compendio delle Nazioni): i 6 scenari S1–S6, le 12 carte Automa
+  scansionate dalla copia fisica, livello Base o Avanzato (azioni con la stella); l'Automa segue le sue regole di
+  scelta (Fronte di Battaglia, Limite d'Armata, priorità di movimento e di ritirata) e il suo copione in Battaglia.
 - **IA** a tre livelli in qualunque combinazione con i giocatori umani; più umani sullo stesso dispositivo con la
   schermata «passa il dispositivo».
 - **Gioco online** su Firebase: ognuno dal suo dispositivo con un codice di 4 lettere.
@@ -51,8 +54,10 @@ dove ritirarsi e schierare.
 - Gli Obiettivi Segreti si completano da soli appena possibile (al massimo uno per turno, il più ricco).
 - Il Bogatyr russo può far ritirare un dado qualsiasi della Battaglia, anche dell'avversario.
 - Lo spazio fisico delle regioni non è limitato.
-- Non sono ancora incluse la Modalità Solitario con l'Automa (le carte Automa non sono nel modulo TTS) e le altre
-  espansioni (Monumenti, Campi di Sangue, Echi del Passato, Pioggia di Fuoco, Emissari del Re).
+- Solitario: quando le regole dell'Automa lasciano una scelta libera («scegline una») decide il caso; le Carte
+  Supporto dell'Automa sono una pila coperta e paga sempre dal fondo.
+- Non sono ancora incluse le altre espansioni (Monumenti, Campi di Sangue, Echi del Passato, Pioggia di Fuoco,
+  Emissari del Re).
 
 ## Comandi
 Trascina con il tasto sinistro per ruotare la vista, con il destro per spostarla, rotella per lo zoom; «Vista»
@@ -71,10 +76,11 @@ sostituito dall'IA.
 ## Struttura
 ```
 data/mappa.json               regioni (nomi, centri) e confini dei due lati del tabellone
-data/scenari.json             i 24 scenari del regolamento
+data/scenari.json             i 24 scenari del regolamento, i 10 della 5ª Nazione e i 6 del Solitario
 scripts/data/ti_data.gd       nazioni, dadi, Carte Ordini, Supporto, Nazione e Obiettivi
 scripts/core/engine.gd        regole e svolgimento della partita
 scripts/core/ai.gd            giocatori artificiali
+scripts/core/automa.gd        scelte dell'Automa in Battaglia (le sue azioni sono nel motore)
 scripts/ui/                   menu, tabellone 3D, vista di gioco, regole
 scripts/net/                  Firebase (REST) e partita online in lockstep
 assets/map/                   mappe dei due lati, maschere e mappe delle regioni (per il clic)
@@ -86,6 +92,7 @@ tests/                        simulazioni, screenshot, prova online con finto Fi
 ```
 godot --headless --path . -s tests/sim.gd -- 10 3 1          # 10 partite fra IA, 3 giocatori, livello Normale
 godot --headless --path . -s tests/sim.gd -- 10 2 1 1        # …in Modalità Avanzata
+TI_SOLO=1 godot --headless --path . -s tests/sim.gd -- 10 2 1 # IA contro l'Automa Base (TI_SOLO=2 Avanzato)
 python3 tests/firebase_mock.py 8765 & …tests/online_play.gd  # due dispositivi online sul finto Firebase
 xvfb-run godot --path . -s res://tests/shot.gd -- game       # screenshot
 ```

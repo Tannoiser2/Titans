@@ -54,9 +54,9 @@ func _ready() -> void:
 	right.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	right.size_flags_vertical = Control.SIZE_EXPAND_FILL
 	cols.add_child(right)
-	var pages := [["Regole", _rules_a(), _rules_b()], ["Nazioni", _nations_a(), _nations_b()], ["5ª Nazione", _nation("sri"), _fifth()], ["Avanzata e varianti", _adv(), _digital()]]
+	var pages := [["Regole", _rules_a(), _rules_b()], ["Nazioni", _nations_a(), _nations_b()], ["5ª Nazione", _nation("sri"), _fifth()], ["Avanzata e varianti", _adv(), _digital()], ["Solitario", _solo_a(), _solo_b()]]
 	for i in pages.size():
-		var b := UI.button(pages[i][0], 220, 44, 19)
+		var b := UI.button(pages[i][0], 200, 44, 19)
 		var k := i
 		b.pressed.connect(func():
 			left.text = pages[k][1]
@@ -148,6 +148,38 @@ func _fifth() -> String:
 	return s
 
 
+func _solo_a() -> String:
+	var s := _h("Modalità Solitario")
+	s += "Giochi contro l'Automa, un avversario guidato da 12 carte con le sue azioni. Si gioca su uno dei 6 scenari dedicati (S1–S6, lato A); scegli quale delle due Nazioni guidi. Si usano tutte le 16 Carte Ordini del gioco base; la Modalità Avanzata e le varianti non si usano.\n\n"
+	s += _h("Preparazione")
+	s += "• L'Automa è il Primo Giocatore. Alcune Carte Nazione di ciascuna Nazione vengono tolte dal suo mazzo.\n"
+	s += "• Tu e l'Automa pescate 3 Carte Supporto: tu acquisti le Carte Nazione come di consueto, l'Automa rivela la prima del suo mazzo e la paga con le carte dal fondo della sua pila (se non può, la mette in fondo al mazzo e pesca 1 Carta Supporto).\n"
+	s += "• Peschi 2 Obiettivi Segreti tre volte e ne tieni 1 ogni volta.\n\n"
+	s += _h("Il turno")
+	s += "Il turno è come nel gioco base, ma alla fine di ogni turno del giocatore le 2 Carte Ordini rimaste nell'Area si scartano, gli Ordini Successivi scorrono e se ne pescano 4. Senza più carte nel Mazzo Ordini il turno successivo è l'ultimo del Round.\n\n"
+	s += _h("Il turno dell'Automa")
+	s += "1. Pesca una carta Automa.\n2. Risolve le azioni dall'alto verso il basso (a livello Base ignora quelle con la stella); un'azione impossibile si salta.\n3. Risolve le Battaglie nell'ordine in cui le ha iniziate.\n4. Pesca 1 Carta Supporto coperta.\n5. Ripristino: scarta dal fondo le carte oltre il limite; se il suo Titano è stato sconfitto torna nell'Armata più grande.\n6. Scarta la Carta Ordini nella posizione indicata (I–IV), lasciandoti 3 carte fra cui scegliere.\n\n"
+	s += _h("Fine della partita")
+	s += "Al termine del 3° Round vinci se hai più Punti Vittoria dell'Automa: in parità vince l'Automa. Perdi subito se l'Automa conquista la tua Capitale. L'Automa prende 2 PV per ogni Regione che controlla a fine Round.\n"
+	return s
+
+
+func _solo_b() -> String:
+	var s := _h("Le azioni dell'Automa")
+	s += "• [b]Recluta[/b] 1 Fanteria, o l'Unità più forte disponibile (Artiglieria, poi Cavalleria, poi Fanteria), nella Regione indicata.\n"
+	s += "• [b]Movimento verso la Capitale[/b]: l'Armata indicata avanza di 1 Regione lungo il percorso più breve verso la tua Capitale.\n"
+	s += "• [b]Movimento d'Espansione[/b]: l'Armata indicata entra in una Regione adiacente, nell'ordine: Regione libera controllata da te, Regione libera non controllata, Regione con la tua Armata più piccola, Regione con l'Armata più piccola dell'Automa.\n"
+	s += "• [b]Acquista una Carta Nazione[/b] dalla cima del suo mazzo.\n"
+	s += "Le Armate indicate sono la più grande, la più piccola, quella con l'Artiglieria o quella con il Titano.\n\n"
+	s += _h("Regole di scelta")
+	s += "• [b]Fronte di Battaglia[/b]: fra più Regioni o Armate valide sceglie quella adiacente al maggior numero di tue Regioni, poi quella vicina a più Regioni libere.\n"
+	s += "• [b]Limite d'Armata[/b]: non crea Armate che superano il limite dei dadi (3 Fanterie, 2 Cavallerie, 1 Artiglieria): sceglie l'opzione successiva.\n"
+	s += "• Con tutti i Segnalini Controllo piazzati non lascia Regioni che controlla.\n\n"
+	s += _h("In Battaglia")
+	s += "L'Automa usa l'abilità della Nazione e le Carte Nazione possibili, poi le Carte Supporto (Muovi > Forza > Dado, il set più grande), e ritira i dadi con il risultato più basso. Se gioca per secondo e ha già il vantaggio massimo (5, o 3 contro una sola Unità) si ferma. Paga i costi con le carte dal fondo della sua pila, perde prima le Unità più deboli e si ritira verso la propria Capitale.\n"
+	return s
+
+
 func _adv() -> String:
 	var s := _h("Modalità Avanzata")
 	s += "Si usa il Mazzo Ordini Avanzati e il lato della plancia con il tracciato Energia (si parte con 1, massimo 10).\n"
@@ -174,5 +206,5 @@ func _digital() -> String:
 	s += "• Le carte Supporto giocate in coppia o in tris sono scelte automaticamente fra quelle con il requisito soddisfatto.\n"
 	s += "• Il Bogatyr russo può far ritirare un dado qualsiasi della Battaglia, anche dell'avversario.\n"
 	s += "• Lo spazio fisico delle regioni non è limitato.\n"
-	s += "• Non sono incluse (per ora) la Modalità Solitario con l'Automa e le espansioni diverse dalla 5ª Nazione.\n"
+	s += "• Non sono incluse (per ora) le espansioni diverse dalla 5ª Nazione.\n"
 	return s

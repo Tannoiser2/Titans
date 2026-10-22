@@ -396,8 +396,11 @@ func evaluate(eng, sm: Sim, s: int) -> float:
 		if worst > 0.0:
 			var x := (worst - my - 0.3) / 2.0
 			var pl := 1.0 / (1.0 + exp(-x * 1.7))
-			var val := rv + (3.0 if sm.cap[r] == s else 0.0) + (1.0 if sm.fort[r] else 0.0)
-			threat += pl * val * w_threat * thr_scale
+			var capv := 3.0
+			if eng.solo and s != eng.automa:
+				capv = 40.0          # nel Solitario perdere la Capitale fa perdere la partita
+			var val := rv + (capv if sm.cap[r] == s else 0.0) + (1.0 if sm.fort[r] else 0.0)
+			threat += pl * val * w_threat * (2.2 if eng.solo and sm.cap[r] == s else 1.0) * thr_scale
 	# unità sul tabellone (in riserva non servono)
 	var units := 0.0
 	for r in sm.own:
@@ -405,6 +408,8 @@ func evaluate(eng, sm: Sim, s: int) -> float:
 			for t in D.UNITS:
 				units += sm.cnt[r][t] * UNIT_VAL[t] * w_units
 	var objv := _objectives_value(eng, sm, s, owners) if use_obj else 0.0
+	if eng.solo and s != eng.automa:
+		threat += _solo_capital_danger(eng, sm, s)
 	var opp_w := 1.0 if eng.n == 2 else 0.6
 	var nopp: int = maxi(1, eng.n - 1)
 	return objv + mine - opp_w * others / nopp * (2.0 if eng.n == 2 else 1.0) * w_opp - threat + bat_val + units + sm.vp_gain
@@ -689,6 +694,44 @@ func _objectives_value(eng, sm: Sim, s: int, owners: Dictionary) -> float:
 			v = vp * prog * prog * 0.45
 		best = maxf(best, v) if prog >= 1.0 else best + v * 0.5
 	return best * w_obj
+
+
+var _cap_dist := {}
+var _cap_dist_turn := -1
+
+
+## Solitario: pericolo per la propria Capitale (se l'Automa la prende la partita è persa). Conta gli eserciti
+## dell'Automa fino a 3 regioni di distanza contro le difese nella Capitale e attorno.
+func _solo_capital_danger(eng, sm: Sim, s: int) -> float:
+	var cr: int = eng._capital_region(s)
+	if cr < 0 or not eng.capital_alive[s]:
+		return 0.0
+	if _cap_dist_turn != eng.turn_no:
+		_cap_dist = eng._dist_from(cr)
+		_cap_dist_turn = eng.turn_no
+	var danger := 0.0
+	var a: int = eng.automa
+	for r in sm.own:
+		if sm.own[r] == a and sm._size(sm.cnt[r]) > 0 and _cap_dist.has(r):
+			var d: int = _cap_dist[r]
+			if d <= 3:
+				danger += army_power(sm.cnt[r]) * [1.2, 1.0, 0.7, 0.35][d]
+	for b in sm.battles:
+		if b["att"] == s and b.get("src", -1) == cr:
+			danger += 0.5
+	var defense := 1.2
+	if sm.own[cr] == s:
+		defense += army_power(sm.cnt[cr]) * 1.3
+	for x in eng.adj(cr):
+		if sm.own[x] == s:
+			defense += army_power(sm.cnt[x]) * 0.35
+	if danger <= 0.0:
+		return 0.0
+	var z := (danger - defense) / 1.4
+	return w_solo_cap / (1.0 + exp(-z * 1.5))
+
+
+var w_solo_cap := 30.0
 
 
 ## Turni (scelte di Carte Ordini) che restano nel Round, compreso quello in corso.

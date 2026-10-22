@@ -51,6 +51,8 @@ func _ready() -> void:
 	for s in engine.n:
 		var p: Dictionary = engine.players[s]
 		engine.ais[s] = TIAI.new(int(p["level"]), int(config.get("seed", 0)) * 7 + s + 1 if config.has("seed") else 0)
+		if p.get("automa", false):
+			engine.ais[s] = TIAutoma.new()
 		if online != null:
 			if s == online.seat:
 				local_humans.append(s)
@@ -266,9 +268,13 @@ func _player_panel(s: int) -> Control:
 	r1.add_child(pv)
 	vb.add_child(r1)
 	var sub := "%s%s" % [D.NATIONS[nat]["name"], "  · IA" if engine.players[s]["ai"] else ""]
+	if engine.solo and s == engine.automa:
+		sub = "%s  · Automa %s" % [D.NATIONS[nat]["name"], "Avanzato" if engine.automa_adv else "Base"]
 	vb.add_child(UI.label(sub, 16, UI.MUTED))
 	var reg := engine.controlled(s).size()
 	var line := "Regioni %d · Supporto %d · Obiettivi %d (fatti %d)" % [reg, engine.hand[s].size(), engine.obj_hand[s].size(), engine.obj_done[s].size()]
+	if engine.solo and s == engine.automa:
+		line = "Regioni %d · Supporto %d (coperte) · 2 PV per Regione a fine Round" % [reg, engine.hand[s].size()]
 	if engine.advanced:
 		line += " · Energia %d" % engine.energy[s]
 	vb.add_child(UI.label(line, 16))
@@ -299,6 +305,8 @@ func _player_panel(s: int) -> Control:
 func _refresh_left() -> void:
 	for c in left_box.get_children():
 		c.queue_free()
+	if engine.solo:
+		_automa_box()
 	left_box.add_child(UI.heading("Ordini", 22))
 	var vis := engine.visible_area()
 	var grid := GridContainer.new()
@@ -344,6 +352,39 @@ func _refresh_left() -> void:
 		g3.add_child(_support_card(c, Vector2(66, 101)))
 	left_box.add_child(g3)
 	left_box.add_child(UI.label("Mazzo: %d · Scarti: %d · Fortezze: %d" % [engine.sdeck.size(), engine.sdiscard.size(), engine.fortresses_left], 15, UI.MUTED))
+
+
+## Solitario: l'ultima carta Automa pescata, con le sue azioni.
+func _automa_box() -> void:
+	left_box.add_child(UI.heading("Carta Automa", 22))
+	var hb := HBoxContainer.new()
+	hb.add_theme_constant_override("separation", 6)
+	var ci: int = engine.automa_card
+	var t := UI.tex("res://assets/carte/automa%02d.jpg" % (ci if ci >= 0 else 12))
+	var tr := UI.icon_rect(t, Vector2(150, 100))
+	tr.mouse_filter = Control.MOUSE_FILTER_STOP
+	var txt := _automa_text(ci)
+	tr.tooltip_text = txt
+	tr.gui_input.connect(func(ev):
+		if ev is InputEventMouseButton and ev.pressed and ev.button_index == MOUSE_BUTTON_LEFT:
+			_zoom_card(t, txt))
+	hb.add_child(tr)
+	hb.add_child(UI.wrap(UI.label("Mazzo Automa: %d\nMano: %d carte coperte" % [engine.automa_deck.size(), engine.hand[engine.automa].size()], 15, UI.MUTED), 130))
+	left_box.add_child(hb)
+	left_box.add_child(HSeparator.new())
+
+
+func _automa_text(ci: int) -> String:
+	if ci < 0:
+		return "L'Automa non ha ancora pescato carte."
+	var c: Dictionary = D.AUTOMA_CARDS[ci]
+	var lines := []
+	for a in c["a"]:
+		lines.append("• " + D.automa_action_text(a))
+	for a in c["adv"]:
+		lines.append("★ " + D.automa_action_text(a) + ("" if engine.automa_adv else " (solo Avanzato)"))
+	lines.append("Poi scarta la Carta Ordini in posizione %s." % ["I", "II", "III", "IV"][int(c["d"]) - 1])
+	return "\n".join(lines)
 
 
 func _order_card(c: int, sz: Vector2, clickable: bool) -> Control:
@@ -933,9 +974,19 @@ func _on_end(results: Array) -> void:
 	pc.add_child(vb)
 	var w: int = results[0]["seat"]
 	var t := UI.title("Vince %s" % engine.pname(w), 46)
+	var sub_t: String = D.NATIONS[engine.nat(w)]["name"]
+	if engine.solo:
+		var won: bool = results[0].get("solo_win", false)
+		t.text = "Vittoria!" if won else "Sconfitta"
+		if won:
+			sub_t = "Hai sconfitto l'Automa con %s." % D.NATIONS[engine.nat(w)]["name"]
+		elif engine.solo_lost:
+			sub_t = "L'Automa ha conquistato la tua Capitale."
+		else:
+			sub_t = "L'Automa ha più Punti Vittoria (in parità vince l'Automa)."
 	t.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	vb.add_child(t)
-	vb.add_child(UI.label(D.NATIONS[engine.nat(w)]["name"], 22, UI.MUTED))
+	vb.add_child(UI.label(sub_t, 22, UI.MUTED))
 	for i in results.size():
 		var r: Dictionary = results[i]
 		var hb := HBoxContainer.new()

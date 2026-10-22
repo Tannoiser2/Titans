@@ -19,7 +19,9 @@ func _run(games: int, np: int, lvl: int, adv: bool) -> void:
 	await process_frame
 	var wins := {}
 	var t0 := Time.get_ticks_msec()
-	var sc := TIData.scenarios_for(np)
+	var solo := OS.get_environment("TI_SOLO") != ""
+	var sc := TIData.solo_scenarios() if solo else TIData.scenarios_for(np)
+	var solo_wins := 0
 	for g in games:
 		var eng := TIEngine.new()
 		eng.headless = true
@@ -27,14 +29,20 @@ func _run(games: int, np: int, lvl: int, adv: bool) -> void:
 		var scn: Dictionary = sc[g % sc.size()]
 		var seats := []
 		for i in np:
-			var code: String = scn["nations"][i]
+			var code: String = scn["nations"][(i + g / sc.size()) % np] if solo else scn["nations"][i]
 			seats.append({"nat": TIData.CODE_TO_NATION[code], "ai": true, "name": TIData.NATIONS[TIData.CODE_TO_NATION[code]]["short"], "level": lvl})
+		if solo:
+			seats[1]["automa"] = true
+			seats[1]["name"] = "Automa"
 		var seed := int(OS.get_environment("TI_SEED") if OS.get_environment("TI_SEED") != "" else "100") + g
-		eng.setup({"seats": seats, "seed": seed, "scenario": scn["id"], "advanced": adv, "capital_capture": OS.get_environment("TI_CAP") == "1", "extended": OS.get_environment("TI_EXT") == "1"})
-		var tseat := g % np
+		eng.setup({"seats": seats, "seed": seed, "scenario": scn["id"], "advanced": adv, "capital_capture": OS.get_environment("TI_CAP") == "1", "extended": OS.get_environment("TI_EXT") == "1", "solo": solo, "automa_adv": OS.get_environment("TI_SOLO") == "2"})
+		var tseat := 0 if solo else g % np
 		var lvl0 := int(OS.get_environment("TI_LVL0")) if OS.get_environment("TI_LVL0") != "" else lvl
 		for i in np:
 			eng.ais[i] = TIAI.new(lvl0 if i == tseat else lvl, 77 + g * 10 + i)
+			if solo and i == 1:
+				eng.ais[i] = TIAutoma.new(99 + g)
+				continue
 			if i == tseat:
 				eng.ais[i].set_exp(OS.get_environment("TI_EXP"))
 			else:
@@ -51,6 +59,10 @@ func _run(games: int, np: int, lvl: int, adv: bool) -> void:
 		for r in eng.results:
 			line.append("%s %d PV (%d reg.)" % [eng.pname(r["seat"]), r["vp"], r["regions"]])
 		var w: String = "test" if eng.results[0]["seat"] == tseat else "altri"
+		if solo:
+			w = "giocatore" if eng.results[0].get("solo_win", false) else "automa"
+			if eng.solo_lost:
+				w = "automa (capitale)"
 		wins[w] = wins.get(w, 0) + 1
 		var bt := 0
 		for s in np:

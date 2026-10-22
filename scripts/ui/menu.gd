@@ -15,6 +15,10 @@ var speed := 1
 var advanced := false
 var capital_capture := false
 var extended := false
+var solo_me := ""               # Solitario: la nazione del giocatore (l'altra è l'Automa)
+var automa_lvl := 0             # 0 Base, 1 Avanzato
+var automa_row: Control
+var opt_rows: Array = []
 var msg: Label
 var scen_box: VBoxContainer
 var seats_box: VBoxContainer
@@ -33,6 +37,8 @@ func _ready() -> void:
 		advanced = st["adv"]
 		capital_capture = st["cap"]
 		extended = st["ext"]
+		solo_me = st.get("solo_me", "")
+		automa_lvl = st.get("alvl", 0)
 	for nt in D.NATION_ORDER:
 		if not modes.has(nt):
 			modes[nt] = 2
@@ -94,12 +100,13 @@ func _ready() -> void:
 	lv.add_theme_constant_override("separation", 10)
 	left.add_child(lv)
 	lv.add_child(UI.heading("Giocatori e scenario", 30))
-	lv.add_child(_segmented("Nazioni", ["2", "3", "4", "5"], nplayers - 2, func(k):
-		nplayers = k + 2
-		var l := D.scenarios_for(nplayers)
+	lv.add_child(_segmented("Nazioni", ["2", "3", "4", "5", "Solo"], 4 if nplayers == 1 else nplayers - 2, func(k):
+		nplayers = 1 if k == 4 else k + 2
+		var l := _scen_list()
 		scen_id = l[0]["id"]
+		msg.text = ""
 		_refresh_scen()
-		_refresh_seats(), 120))
+		_refresh_seats(), 100))
 	var sc := ScrollContainer.new()
 	sc.custom_minimum_size = Vector2(730, 470)
 	sc.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
@@ -126,9 +133,15 @@ func _ready() -> void:
 	rv.add_child(seats_box)
 	rv.add_child(HSeparator.new())
 	rv.add_child(UI.heading("Opzioni", 26))
-	rv.add_child(_toggle("Modalità Avanzata", "Mazzo Ordini Avanzati, Energia e abilità avanzate del Titano", advanced, func(v): advanced = v))
-	rv.add_child(_toggle("Presa della Capitale", "Le Capitali si conquistano invece di essere distrutte: 2 PV a fine partita per ogni Capitale controllata", capital_capture, func(v): capital_capture = v))
-	rv.add_child(_toggle("Partita estesa", "4 Round invece di 3 (sconto 1 nel 3° Round, 2 nel 4°)", extended, func(v): extended = v))
+	opt_rows.append(_toggle("Modalità Avanzata", "Mazzo Ordini Avanzati, Energia e abilità avanzate del Titano", advanced, func(v): advanced = v))
+	rv.add_child(opt_rows[-1])
+	opt_rows.append(_toggle("Presa della Capitale", "Le Capitali si conquistano invece di essere distrutte: 2 PV a fine partita per ogni Capitale controllata", capital_capture, func(v): capital_capture = v))
+	rv.add_child(opt_rows[-1])
+	opt_rows.append(_toggle("Partita estesa", "4 Round invece di 3 (sconto 1 nel 3° Round, 2 nel 4°)", extended, func(v): extended = v))
+	rv.add_child(opt_rows[-1])
+	automa_row = _segmented("Automa", ["Base", "Avanzato"], automa_lvl, func(k): automa_lvl = k, 170)
+	automa_row.tooltip_text = "Livello Avanzato: l'Automa esegue anche le azioni con la stella delle sue carte"
+	rv.add_child(automa_row)
 	rv.add_child(_segmented("Velocità IA", ["Lenta", "Normale", "Veloce", "Istantanea"], speed, func(k): speed = k, 170))
 
 	msg = UI.label("", 24, UI.BLOOD_L, UI.font_head_b)
@@ -170,7 +183,7 @@ func _center() -> void:
 
 
 func _store() -> void:
-	main.menu_state = {"n": nplayers, "scen": scen_id, "modes": modes.duplicate(), "names": names.duplicate(), "speed": speed, "adv": advanced, "cap": capital_capture, "ext": extended}
+	main.menu_state = {"n": nplayers, "scen": scen_id, "modes": modes.duplicate(), "names": names.duplicate(), "speed": speed, "adv": advanced, "cap": capital_capture, "ext": extended, "solo_me": solo_me, "alvl": automa_lvl}
 
 
 func _scen_nations() -> Array:
@@ -181,10 +194,14 @@ func _scen_nations() -> Array:
 	return out
 
 
+func _scen_list() -> Array:
+	return D.solo_scenarios() if nplayers == 1 else D.scenarios_for(nplayers)
+
+
 func _refresh_scen() -> void:
 	for c in scen_box.get_children():
 		c.queue_free()
-	for s in D.scenarios_for(nplayers):
+	for s in _scen_list():
 		var sid: String = s["id"]
 		var b := Button.new()
 		b.custom_minimum_size = Vector2(700, 58)
@@ -203,12 +220,21 @@ func _refresh_scen() -> void:
 			_refresh_seats())
 		scen_box.add_child(b)
 	var sc := D.scenario(scen_id)
+	if nplayers == 1:
+		info_lbl.text = "Modalità Solitario contro l'Automa (Compendio delle Nazioni): 6 scenari sul lato A. Regione Centrale: %s." % D.map_data(sc["side"])["regioni"][int(sc["central"]) - 1]["nome"]
+		return
 	info_lbl.text = "Scenari del regolamento (pagine 19–24). Lato %s del tabellone: %s. Regione Centrale: %s." % [sc["side"], "mappa più piccola" if sc["side"] == "A" else "mappa più ampia", D.map_data(sc["side"])["regioni"][int(sc["central"]) - 1]["nome"]]
 
 
 func _refresh_seats() -> void:
 	for c in seats_box.get_children():
 		c.queue_free()
+	if automa_row != null:
+		automa_row.visible = nplayers == 1
+	for r in opt_rows:
+		r.visible = nplayers != 1
+	if nplayers == 1 and not solo_me in _scen_nations():
+		solo_me = _scen_nations()[0]
 	for nt in _scen_nations():
 		var row := PanelContainer.new()
 		row.add_theme_stylebox_override("panel", UI.panel_style(Color(UI.ndark(nt), 0.9), UI.ncol(nt), 2, 8))
@@ -232,6 +258,25 @@ func _refresh_seats() -> void:
 		var bar := HBoxContainer.new()
 		bar.add_theme_constant_override("separation", 4)
 		hb.add_child(bar)
+		if nplayers == 1:
+			for k in 2:
+				var b := Button.new()
+				b.text = ["Tu", "Automa"][k]
+				b.custom_minimum_size = Vector2(200, 52)
+				b.add_theme_font_size_override("font_size", 20)
+				var on: bool = (solo_me == nt) == (k == 0)
+				b.add_theme_stylebox_override("normal", UI.panel_style(UI.GOLD if on else Color("#1d1f24"), UI.GOLD if on else Color("#3a3833"), 2, 4))
+				b.add_theme_color_override("font_color", UI.IRON if on else UI.TEXT)
+				b.add_theme_color_override("font_hover_color", UI.IRON if on else UI.GOLD)
+				var kk := k
+				b.pressed.connect(func():
+					var ns := _scen_nations()
+					solo_me = ntt if kk == 0 else ns[1 - ns.find(ntt)]
+					_refresh_seats())
+				bar.add_child(b)
+			row.tooltip_text = "Abilità della Nazione: %s\nAbilità del Titano: %s" % [D.NATIONS[nt]["nation_ab"], D.NATIONS[nt]["titan_ab"]]
+			seats_box.add_child(row)
+			continue
 		for k in MODES.size():
 			var b := Button.new()
 			b.text = MODES[k]
@@ -310,8 +355,14 @@ func _config() -> Dictionary:
 		var nm: String = names[nt].strip_edges()
 		if nm == "":
 			nm = D.NATIONS[nt]["short"]
-		seats.append({"nat": nt, "ai": m != 0, "name": nm, "level": maxi(0, m - 1)})
+		if nplayers == 1:
+			var me: bool = nt == solo_me
+			seats.append({"nat": nt, "ai": not me, "automa": not me, "name": nm if me else "Automa", "level": 1})
+		else:
+			seats.append({"nat": nt, "ai": m != 0, "name": nm, "level": maxi(0, m - 1)})
 	var speeds := [1.0, 0.5, 0.15, 0.0]
+	if nplayers == 1:
+		return {"seats": seats, "scenario": scen_id, "ai_delay": speeds[speed], "solo": true, "automa_adv": automa_lvl == 1, "advanced": false, "capital_capture": false, "extended": false}
 	return {"seats": seats, "scenario": scen_id, "ai_delay": speeds[speed], "advanced": advanced, "capital_capture": capital_capture, "extended": extended}
 
 
@@ -330,6 +381,9 @@ var on_start: Button
 
 
 func _online_panel() -> void:
+	if nplayers == 1:
+		msg.text = "La Modalità Solitario non si gioca online: scegli da 2 a 5 Nazioni."
+		return
 	if is_instance_valid(on_panel):
 		on_panel.queue_free()
 	on_panel = Control.new()

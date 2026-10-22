@@ -300,6 +300,44 @@ static func support_text(i: int) -> String:
 	return t
 
 
+# ---------------------------------------------------------------- Modalità Solitario: l'Automa
+## Azioni: [tipo, obiettivo]. Tipi: rec_F (recluta 1 Fanteria), rec_X (recluta l'Unità più forte disponibile:
+## Artiglieria, poi Cavalleria, poi Fanteria), cap (Movimento verso la Capitale del giocatore), exp (Movimento
+## d'Espansione), buy (acquista una Carta Nazione). Obiettivi: big (Armata più grande), small (Armata più
+## piccola), arty (Armata con Artiglieria), titan (Armata con il Titano), capA (Regione con la Capitale
+## dell'Automa), free (Regione libera controllata dall'Automa). "adv" = azioni della difficoltà Avanzata (stella).
+## d = Carta Ordini da scartare (posizione I–IV nell'Area degli Ordini). Ordine = assets/carte/automaNN.jpg.
+
+const AUTOMA_CARDS := [
+	{"a": [["rec_X", "small"], ["cap", "arty"]], "adv": [["rec_F", "free"]], "d": 1},
+	{"a": [["exp", "arty"], ["rec_F", "free"]], "adv": [["buy", ""]], "d": 2},
+	{"a": [["cap", "big"], ["exp", "small"], ["rec_F", "free"]], "adv": [], "d": 3},
+	{"a": [["exp", "big"], ["cap", "small"], ["buy", ""]], "adv": [], "d": 2},
+	{"a": [["exp", "big"], ["cap", "small"], ["rec_F", "free"]], "adv": [], "d": 1},
+	{"a": [["cap", "titan"], ["rec_F", "free"]], "adv": [["exp", "arty"]], "d": 1},
+	{"a": [["rec_X", "small"], ["exp", "titan"]], "adv": [["cap", "small"]], "d": 4},
+	{"a": [["rec_X", "small"], ["cap", "titan"]], "adv": [["exp", "arty"]], "d": 3},
+	{"a": [["cap", "big"], ["exp", "small"], ["buy", ""]], "adv": [], "d": 4},
+	{"a": [["rec_F", "capA"], ["cap", "big"], ["exp", "small"]], "adv": [], "d": 3},
+	{"a": [["rec_X", "capA"], ["cap", "big"], ["exp", "small"]], "adv": [], "d": 4},
+	{"a": [["cap", "titan"], ["buy", ""]], "adv": [["rec_X", "small"]], "d": 2},
+]
+const AUTOMA_TARGET := {"big": "l'Armata più grande", "small": "l'Armata più piccola", "arty": "l'Armata con l'Artiglieria",
+	"titan": "l'Armata con il Titano", "capA": "la Regione della Capitale dell'Automa", "free": "una Regione libera controllata dall'Automa"}
+## Carte Nazione che l'Automa rimette nella scatola (simbolo del Solitario).
+const SOLO_REMOVE := {"pol": [0, 1, 8], "rus": [1, 2, 9], "sve": [0, 2, 8], "ott": [0, 1, 7], "sri": [3, 5, 6]}
+
+
+static func automa_action_text(act: Array) -> String:
+	match act[0]:
+		"rec_F": return "Recluta 1 Fanteria in " + AUTOMA_TARGET[act[1]]
+		"rec_X": return "Recluta l'Unità più forte disponibile in " + AUTOMA_TARGET[act[1]]
+		"cap": return "Muovi " + AUTOMA_TARGET[act[1]] + " verso la tua Capitale"
+		"exp": return "Movimento d'Espansione con " + AUTOMA_TARGET[act[1]]
+		"buy": return "Acquista una Carta Nazione"
+	return "?"
+
+
 # ---------------------------------------------------------------- Obiettivi Segreti
 ## kind e parametri usati dal motore; vp = Punti Vittoria.
 
@@ -355,7 +393,17 @@ static func scenarios_for(n: int, with_exp := true) -> Array:
 	for s in scenarios():
 		if not with_exp and s.has("expansion"):
 			continue
+		if s.get("solo", false):
+			continue
 		if (s["nations"] as Array).size() == n:
+			out.append(s)
+	return out
+
+
+static func solo_scenarios() -> Array:
+	var out := []
+	for s in scenarios():
+		if s.get("solo", false):
 			out.append(s)
 	return out
 
