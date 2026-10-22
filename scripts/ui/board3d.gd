@@ -63,7 +63,11 @@ func _ready() -> void:
 	sun.light_energy = 1.15
 	sun.light_color = Color("#fff1d8")
 	sun.shadow_enabled = true
+	sun.directional_shadow_mode = DirectionalLight3D.SHADOW_ORTHOGONAL
 	sun.directional_shadow_max_distance = 45.0
+	sun.shadow_bias = 0.08
+	sun.shadow_normal_bias = 1.6
+	sun.shadow_blur = 1.5
 	vp.add_child(sun)
 	var fill := DirectionalLight3D.new()
 	fill.rotation_degrees = Vector3(-30, -140, 0)
@@ -424,19 +428,55 @@ func rpos(r: int) -> Vector3:
 	return Vector3((float(g["x"]) - 0.5) * W, 0.0, (float(g["y"]) - 0.5) * W)
 
 
+var region_sig := {}
+var border_sig := ""
+var border_root: Node3D
+
+
+## Ricostruisce solo le regioni (e le unità sui confini) che sono cambiate: rifare tutto il tabellone a ogni
+## aggiornamento creava e distruggeva centinaia di nodi e faceva sfarfallare l'immagine.
 func refresh() -> void:
 	if eng == null:
 		return
-	for c in pieces.get_children():
-		c.queue_free()
 	for r in eng.regions:
+		var sig := _region_signature(r)
+		if region_sig.get(r, "") == sig and region_nodes.has(r) and is_instance_valid(region_nodes[r]):
+			continue
+		region_sig[r] = sig
+		if region_nodes.has(r) and is_instance_valid(region_nodes[r]):
+			region_nodes[r].free()
 		_build_region(r)
 	# battaglie in sospeso: unità sul confine
+	var bl := []
 	for b in eng.battles:
-		_build_border(b["att"], b["r"], b["u"])
+		bl.append([b["att"], b["r"], b["u"]])
 	if not eng.battle.is_empty() and not eng.battle.has("outcome"):
-		_build_border(eng.battle["att"], eng.battle["r"], eng.battle["u_att"])
+		bl.append([eng.battle["att"], eng.battle["r"], eng.battle["u_att"]])
+	var bs := var_to_str(bl)
+	if bs != border_sig or not is_instance_valid(border_root):
+		border_sig = bs
+		if is_instance_valid(border_root):
+			border_root.free()
+		border_root = Node3D.new()
+		pieces.add_child(border_root)
+		for x in bl:
+			_build_border(x[0], x[1], x[2])
 	_update_flags()
+
+
+func _region_signature(r: int) -> String:
+	var g: Dictionary = eng.reg[r]
+	var parts := [g["own"], g["n"], g["tok"], g["cap"], g["capctrl"], g["fort"], g.get("fire", -1), g.get("fallen", 0), g.get("mon", [])]
+	if g["cap"] >= 0:
+		parts.append(eng.capital_alive[g["cap"]])
+	var gm: Array = g.get("mon", [])
+	if not gm.is_empty():
+		parts.append(eng.mon[gm[0]][gm[1]]["r2"])
+	if eng.exp_emi:
+		for p in eng.n:
+			if not eng.emi[p].is_empty() and eng.emi[p]["r"] == r:
+				parts.append([p, eng.emi[p]["k"], eng.emi[p]["on"]])
+	return var_to_str(parts)
 
 
 func _build_region(r: int) -> void:
@@ -600,7 +640,7 @@ func _build_border(att: int, r: int, units: Array) -> void:
 			var m := _fire_model(nat) if t == "P" else (_cossack_model(nat) if t == "Q" else _model(t, nat, h))
 			m.position = p + side * (float(i) - 0.5) * 0.42
 			m.look_at_from_position(m.position, m.position + dir * 3.0, Vector3.UP)
-			pieces.add_child(m)
+			border_root.add_child(m)
 			if k > 1:
 				var lb := _count_label(k, UI.ncol(nat))
 				lb.position.y = h + 0.12
@@ -616,7 +656,7 @@ func _build_border(att: int, r: int, units: Array) -> void:
 	sw.billboard = BaseMaterial3D.BILLBOARD_ENABLED
 	sw.no_depth_test = true
 	sw.position = rpos(r) + Vector3(0, 1.5, 0)
-	pieces.add_child(sw)
+	border_root.add_child(sw)
 
 
 func _update_flags() -> void:

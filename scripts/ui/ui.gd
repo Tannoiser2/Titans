@@ -170,7 +170,40 @@ static func primary(b: Button) -> Button:
 
 
 ## Dado disegnato: colore per tipo, pallini pari al valore (0 = faccia vuota).
+static var _die_tex := {}
+
+
+## Facce vere dei dadi speciali (Echi del Passato, Campi di Sangue, Spirito di Guerra), da foto e scansioni.
+static func die_face(t: String, v: int, special: bool) -> Texture2D:
+	var key := ""
+	match t:
+		"C": key = "C%d%s" % [v, "s" if special else ""]
+		"Q": key = "Q%d" % clampi(v, 0, 2)
+		"W": key = "Ws" if special else "W%d" % v
+	if key == "":
+		return null
+	if not _die_tex.has(key):
+		var path := "res://assets/dadi/%s.png" % key
+		_die_tex[key] = load(path) if ResourceLoader.exists(path) else null
+	return _die_tex[key]
+
+
 static func draw_die(ci: CanvasItem, rect: Rect2, t: String, v: int, selected := false, dim := false, skull := false, zero := false) -> void:
+	var face := die_face(t, v, skull)
+	if face != null:
+		ci.draw_texture_rect(face, rect, false, Color(0.55, 0.55, 0.55) if (dim or zero) else Color.WHITE)
+		if selected:
+			var sbs := StyleBoxFlat.new()
+			sbs.draw_center = false
+			sbs.set_corner_radius_all(int(rect.size.x * 0.18))
+			sbs.border_color = GOLD_L
+			sbs.set_border_width_all(4)
+			ci.draw_style_box(sbs, rect)
+		if t == "W" and skull and v > 0:
+			init_fonts()
+			ci.draw_string_outline(font_head_b, rect.position + Vector2(0, rect.size.y * 0.98), "+%d" % v, HORIZONTAL_ALIGNMENT_RIGHT, rect.size.x * 0.95, int(rect.size.x * 0.34), 6, Color(0, 0, 0, 0.9))
+			ci.draw_string(font_head_b, rect.position + Vector2(0, rect.size.y * 0.98), "+%d" % v, HORIZONTAL_ALIGNMENT_RIGHT, rect.size.x * 0.95, int(rect.size.x * 0.34), GOLD_L)
+		return
 	var bg: Color = {"F": Color("#e9dcc0"), "K": Color("#c79a5a"), "A": Color("#8f969e"), "T": Color("#7e1f1f"), "C": Color("#5b3a8c"), "Q": Color("#6d7078"), "W": Color("#2aa7ad")}[t]
 	var pip: Color = Color("#f6ecd6") if t in ["T", "C", "Q", "W"] else Color("#1d1712")
 	if zero:

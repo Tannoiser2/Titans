@@ -64,7 +64,7 @@ func _run() -> void:
 		await shot("menu_solo")
 		quit()
 		return
-	var scen: String = {"game4": "4-2B", "game5": "5-2", "hre": "I2-1", "solo": "S1", "xp": "4-1A"}.get(mode, "2-1A")
+	var scen: String = {"game4": "4-2B", "game5": "5-2", "hre": "I2-1", "solo": "S1", "xp": "4-1A", "xp5": "5-1"}.get(mode, "2-1A")
 	var seats := []
 	for c in TIData.scenario(scen)["nations"]:
 		var nt: String = TIData.CODE_TO_NATION[c]
@@ -73,12 +73,13 @@ func _run() -> void:
 		seats[1]["automa"] = true
 		seats[1]["name"] = "Automa"
 	main.start_game({"seats": seats, "scenario": scen, "seed": 42, "ai_delay": 0.0, "advanced": mode == "adv", "solo": mode == "solo", "automa_adv": true,
-		"monuments": mode == "xp", "emissaries": mode == "xp", "fire": mode == "xp", "echoes": mode == "xp", "fields": mode == "xp", "spirit": mode == "xp", "titans": mode == "xp"})
+		"monuments": mode.begins_with("xp"), "emissaries": mode.begins_with("xp"), "fire": mode.begins_with("xp"), "echoes": mode.begins_with("xp"), "fields": mode.begins_with("xp"), "spirit": mode.begins_with("xp"), "titans": mode.begins_with("xp")})
 	await wait(30)
 	await shot("inizio")
 	# risponde con l'IA alle decisioni umane fino a una battaglia
 	var ai := TIAI.new(1, 5)
 	var steps := 0
+	var last_turn := -1
 	var shots_taken := {}
 	while steps < 20000:
 		steps += 1
@@ -92,6 +93,11 @@ func _run() -> void:
 		if not shots_taken.has(key) and key in ["pick_order", "region_move_to", "pick_battle", "cards_pay", "pick_buy_start", "pick_objective", "region_deploy", "pick_action", "pick_mon_build", "pick_emi_token", "pick_fire", "pick_mon_menu", "pick_echo_card", "pick_cos_action", "pick_cos_end", "pick_tp_choose"]:
 			shots_taken[key] = true
 			await shot(key)
+		if mode == "xp5" and e.turn_no != last_turn:
+			last_turn = e.turn_no
+			await shot("t%d" % e.turn_no)
+		if mode == "xp5" and e.round_no >= 2:
+			break
 		if e.round_no >= 2 and not shots_taken.has("round2"):
 			shots_taken["round2"] = true
 			await shot("round2")
