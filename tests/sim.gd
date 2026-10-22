@@ -35,7 +35,8 @@ func _run(games: int, np: int, lvl: int, adv: bool) -> void:
 			seats[1]["automa"] = true
 			seats[1]["name"] = "Automa"
 		var seed := int(OS.get_environment("TI_SEED") if OS.get_environment("TI_SEED") != "" else "100") + g
-		eng.setup({"seats": seats, "seed": seed, "scenario": scn["id"], "advanced": adv, "capital_capture": OS.get_environment("TI_CAP") == "1", "extended": OS.get_environment("TI_EXT") == "1", "solo": solo, "automa_adv": OS.get_environment("TI_SOLO") == "2"})
+		eng.setup({"seats": seats, "seed": seed, "scenario": scn["id"], "advanced": adv, "capital_capture": OS.get_environment("TI_CAP") == "1", "extended": OS.get_environment("TI_EXT") == "1", "solo": solo, "automa_adv": OS.get_environment("TI_SOLO") == "2",
+			"monuments": "m" in OS.get_environment("TI_XP"), "emissaries": "e" in OS.get_environment("TI_XP"), "fire": "f" in OS.get_environment("TI_XP")})
 		var tseat := 0 if solo else g % np
 		var lvl0 := int(OS.get_environment("TI_LVL0")) if OS.get_environment("TI_LVL0") != "" else lvl
 		for i in np:
@@ -93,8 +94,34 @@ func _check(eng: TIEngine) -> void:
 		if not eng.battle.is_empty() and eng.battle["att"] == s and not eng.battle.has("post"):
 			for u in eng.battle["u_att"]:
 				k[u["t"]] += 1
+		var fires := 0
+		for r in eng.regions:
+			if eng.reg[r]["fire"] == s:
+				fires += 1
+				if eng.reg[r]["own"] != s or eng.reg[r]["n"]["A"] < 1:
+					errors += 1
+					print("ERRORE: Artiglieria di Fuoco di %s fuori posto in %s" % [eng.pname(s), eng.rname(r)])
+		for b in eng.battles:
+			if b["att"] == s:
+				for u in b["u"]:
+					if u.get("fire", false):
+						fires += 1
+		if not eng.battle.is_empty() and eng.battle["att"] == s and not eng.battle.has("post"):
+			for u in eng.battle["u_att"]:
+				if u.get("fire", false):
+					fires += 1
+		if eng.exp_fire and fires != (0 if eng.fire_free[s] else 1) and eng.battle.is_empty():
+			errors += 1
+			print("ERRORE: Artiglieria di Fuoco di %s: %d sul tabellone, libera %s (turno %d)" % [eng.pname(s), fires, eng.fire_free[s], eng.turn_no])
+		if eng.exp_emi and not eng.emi[s].is_empty() and eng.battle.is_empty() and eng.phase in ["play", "draw", "reset"]:
+			var er: int = eng.emi[s]["r"]
+			if er >= 0 and (eng.reg[er]["own"] != s or eng.units_total(er) == 0):
+				errors += 1
+				print("ERRORE: Emissario di %s senza Armata in %s (fase %s)" % [eng.pname(s), eng.rname(er), eng.phase])
 		for t in ["F", "K", "A"]:
 			var tot: int = k[t] + eng.reserve[s][t]
+			if t == "A" and eng.exp_fire and not eng.fire_free[s]:
+				tot -= 1
 			if tot != TIData.UNIT_COUNT[t] and not (not eng.battle.is_empty() and eng.battle.has("post")):
 				errors += 1
 				print("ERRORE: %s ha %d %s (turno %d, fase %s)" % [eng.pname(s), tot, t, eng.turn_no, eng.phase])

@@ -258,6 +258,66 @@ func _model(kind: String, nat: String, height: float) -> Node3D:
 	return holder
 
 
+## Artiglieria di Fuoco: la miniatura dell'Artiglieria, più grande e arroventata, con la fiamma.
+func _fire_model(nat: String) -> Node3D:
+	var n := _model("A", nat, 0.78)
+	for c in n.get_children():
+		if c is MeshInstance3D:
+			var key := "fire_" + nat
+			if not mats.has(key):
+				var m := StandardMaterial3D.new()
+				m.albedo_color = UI.ncol(nat).darkened(0.1)
+				m.emission_enabled = true
+				m.emission = Color("#ff4a08")
+				m.emission_energy_multiplier = 0.12
+				m.roughness = 0.45
+				m.metallic = 0.3
+				mats[key] = m
+			(c as MeshInstance3D).material_override = mats[key]
+	var fs := Sprite3D.new()
+	fs.texture = load("res://assets/segni/fiamma.png")
+	fs.pixel_size = 0.42 / float(fs.texture.get_width())
+	fs.billboard = BaseMaterial3D.BILLBOARD_ENABLED
+	fs.shaded = false
+	fs.position = Vector3(0.12, 0.78, 0)
+	n.add_child(fs)
+	return n
+
+
+func _monument_token(nat: String, i: int) -> Node3D:
+	var n := Node3D.new()
+	var base := MeshInstance3D.new()
+	var bm := CylinderMesh.new()
+	bm.top_radius = 0.2
+	bm.bottom_radius = 0.24
+	bm.height = 0.1
+	base.mesh = bm
+	base.position.y = 0.05
+	base.material_override = _mat("stone", Color("#8f8b82"), 0.9, 0.0)
+	n.add_child(base)
+	var sp := Sprite3D.new()
+	sp.texture = load("res://assets/segni/mon_%s%d.png" % [nat, i])
+	sp.pixel_size = 0.5 / float(sp.texture.get_width())
+	sp.billboard = BaseMaterial3D.BILLBOARD_FIXED_Y
+	sp.position.y = 0.38
+	sp.shaded = false
+	sp.alpha_cut = SpriteBase3D.ALPHA_CUT_DISCARD
+	n.add_child(sp)
+	return n
+
+
+func _emi_sprite(e: Dictionary) -> Sprite3D:
+	var sp := Sprite3D.new()
+	sp.texture = load("res://assets/segni/emi_%s.png" % e["k"])
+	sp.pixel_size = 0.34 / float(sp.texture.get_width())
+	sp.billboard = BaseMaterial3D.BILLBOARD_ENABLED
+	sp.shaded = false
+	sp.alpha_cut = SpriteBase3D.ALPHA_CUT_DISCARD
+	if not e["on"]:
+		sp.modulate = Color(0.5, 0.5, 0.5)
+	return sp
+
+
 func _fortress() -> Node3D:
 	var n := Node3D.new()
 	var stone := _mat("stone", Color("#8f8b82"), 0.9, 0.0)
@@ -366,11 +426,35 @@ func _build_region(r: int) -> void:
 		f.position = slots[si]
 		root.add_child(f)
 		si += 1
+	var gm: Array = g.get("mon", [])
+	if not gm.is_empty():
+		var md: Dictionary = eng.mon[gm[0]][gm[1]]
+		if md["r"] == r:
+			var mt := _monument_token(eng.nat(gm[0]), gm[1])
+			if md["r2"] >= 0:
+				mt.position = (rpos(md["r2"]) - base) * 0.5
+			else:
+				mt.position = slots[si]
+				si += 1
+			root.add_child(mt)
 	var own: int = g["own"]
 	if own >= 0 and eng.units_total(r) > 0:
 		var nat: String = eng.nat(own)
+		if g.get("fire", -1) == own:
+			var fm := _fire_model(nat)
+			fm.position = slots[si % slots.size()]
+			fm.rotation_degrees.y = 200 + si * 23
+			root.add_child(fm)
+			si += 1
+		if eng.exp_emi and not eng.emi[own].is_empty() and eng.emi[own]["r"] == r:
+			var es := _emi_sprite(eng.emi[own])
+			es.position = slots[si % slots.size()] + Vector3(0, 0.3, 0)
+			root.add_child(es)
+			si += 1
 		for t in ["T", "A", "K", "F"]:
 			var k: int = g["n"][t]
+			if t == "A" and g.get("fire", -1) == own:
+				k -= 1
 			if k <= 0:
 				continue
 			var h: float = {"T": 1.55, "A": 0.62, "K": 0.85, "F": 0.78}[t]
@@ -443,7 +527,8 @@ func _build_border(att: int, r: int, units: Array) -> void:
 		var key := "%d" % int(u["from"])
 		if not groups.has(key):
 			groups[key] = {}
-		groups[key][u["t"]] = groups[key].get(u["t"], 0) + 1
+		var ut: String = "P" if u.get("fire", false) else u["t"]
+		groups[key][ut] = groups[key].get(ut, 0) + 1
 	for key in groups:
 		var src := int(key)
 		var a := rpos(src)
@@ -452,12 +537,12 @@ func _build_border(att: int, r: int, units: Array) -> void:
 		var dir := (b - a).normalized()
 		var side := Vector3(-dir.z, 0, dir.x)
 		var i := 0
-		for t in ["T", "A", "K", "F"]:
+		for t in ["T", "P", "A", "K", "F"]:
 			var k: int = groups[key].get(t, 0)
 			if k <= 0:
 				continue
-			var h: float = {"T": 1.55, "A": 0.62, "K": 0.85, "F": 0.78}[t]
-			var m := _model(t, nat, h)
+			var h: float = {"T": 1.55, "P": 0.75, "A": 0.62, "K": 0.85, "F": 0.78}[t]
+			var m := _fire_model(nat) if t == "P" else _model(t, nat, h)
 			m.position = p + side * (float(i) - 0.5) * 0.42
 			m.look_at_from_position(m.position, m.position + dir * 3.0, Vector3.UP)
 			pieces.add_child(m)

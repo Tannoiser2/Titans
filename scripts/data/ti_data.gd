@@ -8,6 +8,7 @@ extends RefCounted
 const UNITS := ["F", "K", "A", "T"]
 const UNIT_NAME := {"F": "Fanteria", "K": "Cavalleria", "A": "Artiglieria", "T": "Titano"}
 const UNIT_NAME_PL := {"F": "Fanterie", "K": "Cavallerie", "A": "Artiglierie", "T": "Titani"}
+const FIRE_NAME := "Artiglieria di Fuoco"
 ## Unità di ogni nazione (13: 6 Fanteria, 4 Cavalleria, 2 Artiglieria, 1 Titano).
 const UNIT_COUNT := {"F": 6, "K": 4, "A": 2, "T": 1}
 ## Facce dei dadi (simboli successo), dalla plancia.
@@ -367,6 +368,84 @@ const OBJECTIVES := [
 	{"vp": 2, "kind": "win_only_titan", "text": "Vinci una Battaglia con il solo Titano."},
 	{"vp": 2, "kind": "win_no_titan_vs_titan", "text": "Vinci una Battaglia con un'Armata senza Titano contro un'Armata con il Titano."},
 ]
+
+# ---------------------------------------------------------------- espansioni Kickstarter
+## Monumenti: 3 per Nazione. Il costo è il numero romano della carta (I, II, III) in Carte Supporto.
+## when: "turno" = una volta per turno a scelta; "auto" = si applica da sé; "dopo_a", "dopo_c", "dopo_d" =
+## dopo quella fase; "battaglia" = una volta per Battaglia; "sempre" = effetto continuo.
+const MONUMENTS := {
+	"pol": [
+		{"key": "town_pol", "name": "Municipio", "cost": 1, "when": "turno", "text": "Una volta per turno: scarta 1 Carta Supporto e schiera 1 Fanteria nella Regione del Monumento, oppure scambia lì 1 Fanteria con 1 Cavalleria."},
+		{"key": "cath_pol", "name": "Cattedrale", "cost": 2, "when": "sempre", "after_d": true, "text": "+1 PV subito dopo aver preso il controllo di ogni Regione adiacente al Monumento. Si costruisce solo dopo la Fase D."},
+		{"key": "castle_pol", "name": "Castello Reale", "cost": 3, "when": "auto", "text": "Una volta per turno: pesca 1 Carta Supporto se controlli al massimo 2 Regioni adiacenti al Monumento."},
+	],
+	"rus": [
+		{"key": "sofia", "name": "Cattedrale di Santa Sofia", "cost": 1, "when": "sempre", "border": true, "text": "Si piazza sul confine fra 2 Regioni, una delle quali tua: nessuna Unità può attraversare quel confine. A fine Round, finché è sulla mappa, +1 PV."},
+		{"key": "basil", "name": "Cattedrale di San Basilio", "cost": 2, "when": "auto", "text": "Una volta per turno: se controlli 4 o più Regioni confinanti con quella del Monumento, pesca 1 Carta Supporto."},
+		{"key": "spass", "name": "Torre di Spasskaja", "cost": 3, "when": "sempre", "text": "Le Unità che muovi dalla Regione del Monumento possono spostarsi di 1 Regione in più; in tal caso il primo passo non può entrare in una Regione controllata da un avversario."},
+	],
+	"sve": [
+		{"key": "town_sve", "name": "Municipio", "cost": 1, "when": "turno", "text": "Una volta per turno: scarta 1 Carta Supporto e schiera 1 Fanteria nella Regione del Monumento."},
+		{"key": "cath_sve", "name": "Cattedrale", "cost": 2, "when": "sempre", "text": "Ogni volta che prendi il controllo di una Regione adiacente al Monumento, pesca 2 Carte Supporto."},
+		{"key": "kronor", "name": "Castello di Tre Kronor", "cost": 3, "when": "dopo_d", "text": "Dopo la Fase D puoi muovere 1 Unità dalla Regione del Monumento o da una adiacente, ma non in una Regione con Unità nemiche."},
+	],
+	"ott": [
+		{"key": "topkapi", "name": "Palazzo di Topkapi", "cost": 1, "when": "dopo_a", "text": "Dopo la Fase A puoi muovere 1 Cavalleria dalla Regione del Monumento o da una adiacente; il movimento può iniziare una nuova Battaglia."},
+		{"key": "jan", "name": "Tenda dei Giannizzeri", "cost": 2, "when": "auto", "text": "Una volta per turno: +1 PV se controlli 5 o più Regioni adiacenti alla Regione del Monumento."},
+		{"key": "mosque", "name": "Moschea Blu", "cost": 3, "when": "dopo_c", "no_start": true, "text": "Dopo la Fase C: metti sotto il Monumento la prima Carta Supporto del mazzo, oppure prendi tutte quelle che ci sono sotto. Non si costruisce nelle Regioni di partenza."},
+	],
+	"sri": [
+		{"key": "stefan", "name": "Cattedrale di Santo Stefano", "cost": 1, "when": "sempre", "text": "Pesca 2 Carte Supporto dopo che una Battaglia nella Regione del Monumento o in una adiacente ha eliminato una o più Unità."},
+		{"key": "schon", "name": "Castello di Schönbrunn", "cost": 2, "when": "dopo_c", "text": "Dopo la Fase C: +1 PV se almeno 2 Regioni adiacenti al Monumento sono controllate da avversari."},
+		{"key": "town_sri", "name": "Municipio", "cost": 3, "when": "battaglia", "text": "In una Battaglia nella Regione del Monumento o in una adiacente puoi giocare gratis 1 delle prime 3 Carte Nazione del tuo mazzo, solo per quella Battaglia; poi va in fondo al mazzo."},
+	],
+}
+
+## Emissari del Re: segnalini che accompagnano un'Armata e la aiutano in Battaglia.
+const EMISSARIES := {
+	"F2": "Aggiungi 2 Dadi Fanteria",
+	"K1": "Aggiungi 1 Dado Cavalleria",
+	"draw": "Pesca 1 Carta Supporto",
+	"max": "Porta 1 Dado al valore massimo",
+	"vp": "Se vinci la Battaglia: +1 PV",
+}
+const EMISSARY_KEYS := ["F2", "K1", "draw", "max", "vp"]
+
+## Obiettivi Nazione (Emissari del Re), 3 per Nazione.
+const NATION_OBJECTIVES := {
+	"pol": [
+		{"kind": "win_only_K", "text": "Vincere una Battaglia solo con Unità di Cavalleria."},
+		{"kind": "start_neigh_all", "text": "Controllare tutte le Regioni adiacenti alle proprie Regioni di partenza."},
+		{"kind": "win_no_cards", "text": "Vincere una Battaglia senza usare Carte Supporto né Carte Nazione."},
+	],
+	"rus": [
+		{"kind": "win_central", "text": "Vincere una Battaglia nella Regione Centrale."},
+		{"kind": "win_empty_hand", "text": "Vincere una Battaglia senza Carte Supporto in mano."},
+		{"kind": "all_F", "text": "Avere tutte le Unità di Fanteria schierate sul Tabellone."},
+	],
+	"sve": [
+		{"kind": "win_only_F", "text": "Vincere una Battaglia solo con Unità di Fanteria."},
+		{"kind": "wipe", "text": "Eliminare tutte le Unità avversarie in una Battaglia."},
+		{"kind": "tokens_plus2", "text": "Controllare con Segnalini Controllo 2 Regioni in più rispetto a quelle controllate dalle proprie Unità."},
+	],
+	"ott": [
+		{"kind": "win_only_A", "text": "Vincere una Battaglia solo con Unità di Artiglieria."},
+		{"kind": "win_capital", "text": "Vincere una Battaglia in una Regione con una Capitale."},
+		{"kind": "near_titan3", "text": "Controllare 3 o più Regioni adiacenti a una o più Regioni con un Titano nemico."},
+	],
+	"sri": [
+		{"kind": "dice8", "text": "Utilizzare tutti e 8 i Dadi Battaglia in una Battaglia."},
+		{"kind": "nc5", "text": "Utilizzare almeno 5 Carte Nazione in una Battaglia."},
+		{"kind": "all_K", "text": "Avere tutte le Unità di Cavalleria schierate sul Tabellone."},
+	],
+}
+## Ricompense degli Obiettivi Nazione: il 1° dà un Emissario, il 2° 3 PV, il 3° 5 PV.
+const NOBJ_VP := [0, 3, 5]
+
+
+static func monument(nat: String, i: int) -> Dictionary:
+	return MONUMENTS[nat][i]
+
 
 # ---------------------------------------------------------------- mappa e scenari
 

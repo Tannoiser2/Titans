@@ -432,7 +432,7 @@ func _sources(eng, sm: Sim, s: int, t: String) -> Array:
 
 func _targets(eng, sm: Sim, s: int, src: int) -> Array:
 	var out := []
-	for a in eng.adj(src):
+	for a in eng.move_adj(src):
 		var o := sm.owner(a)
 		if o >= 0 and o != s:
 			# regola dell'ultima regione
@@ -864,6 +864,10 @@ func _pick(eng, s: int, req: Dictionary) -> int:
 			for i in opts.size():
 				if opts[i]["action"] == "_titan_inf":
 					return i
+				if opts[i]["action"] in ["_mon_F", "_mon_FK"] and eng.hand[s].size() >= 3:
+					return i
+				if opts[i]["action"] == "_mon_build" and ai_build_pick(eng, s) >= 0:
+					return i
 			if plan.is_empty():
 				return opts.size() - 1
 			var nxt: Dictionary = plan[0]
@@ -945,6 +949,42 @@ func _pick(eng, s: int, req: Dictionary) -> int:
 			return 0
 		"nc_after_d":
 			return 1
+		"mon_build":
+			var want := ai_build_pick(eng, s)
+			for i in opts.size():
+				if opts[i]["mon"] == want:
+					return i
+			return opts.size() - 1
+		"mon_menu":
+			for i in opts.size():
+				var a: String = opts[i]["action"]
+				if a in ["_mon_F", "_mon_FK"] and eng.hand[s].size() >= 2:
+					return i
+				if a == "_mon_build" and ai_build_pick(eng, s) >= 0:
+					return i
+			return opts.size() - 1
+		"emi_token":
+			var best := 0
+			var bv := -1.0
+			for i in opts.size():
+				var v: float = {"F2": 5.0, "max": 4.0, "K1": 3.0, "vp": 2.5, "draw": 2.0}.get(opts[i]["emi"], 1.0)
+				if v > bv:
+					bv = v
+					best = i
+			return best
+		"emi_move":
+			return 1 if req.get("battle_move", false) else 0
+		"spass":
+			var d: int = req.get("from", -1)
+			if d >= 0:
+				for a in eng.move_targets(s, d):
+					if eng.owner(a) == -1:
+						return 1
+			return 0
+		"mosque":
+			return 1 if opts.size() > 1 and int(req.get("under", 0)) >= 2 else 0
+		"mon_nc_pick":
+			return 0
 		"before_battle":
 			return _before_battle(eng, s, opts)
 		"battle":
@@ -1043,6 +1083,48 @@ func _region(eng, s: int, req: Dictionary) -> int:
 			return best
 		"move_out_to":
 			return allowed[0]
+		"mon_region", "mon_region2", "emi_region":
+			var best: int = allowed[0]
+			var bv := -1e9
+			for r in allowed:
+				var own_adj := 0
+				var foe_adj := 0
+				for a in eng.adj(r):
+					var o: int = eng.owner(a)
+					if o == s:
+						own_adj += 1
+					elif o >= 0:
+						foe_adj += 1
+				var v := 0.0
+				match ctx:
+					"mon_region":
+						v = 1.0 * own_adj - 1.2 * foe_adj + 0.3 * eng.units_total(r)
+					"mon_region2":
+						v = 2.0 * float(eng.owner(r) >= 0 and eng.owner(r) != s) + 0.5 * eng.units_total(r)
+					"emi_region":
+						v = 1.0 * eng.units_total(r) + 0.8 * foe_adj
+				if v > bv:
+					bv = v
+					best = r
+			return best
+		"mon_move_from":
+			for r in allowed:
+				if eng.units_total(r) < 2:
+					continue
+				for a in eng.move_targets(s, r):
+					if eng.owner(a) == -1:
+						step = {"mon_dst": a}
+						return r
+			return -1
+		"mon_move_to", "spass_to":
+			if step.has("mon_dst") and step["mon_dst"] in allowed:
+				var d: int = step["mon_dst"]
+				step = {}
+				return d
+			for r in allowed:
+				if eng.owner(r) == -1:
+					return r
+			return -1
 	return allowed[0] if not req.get("skip", false) else allowed[0]
 
 
@@ -1185,6 +1267,9 @@ func _need(eng, s: int) -> int:
 
 
 func _battle(eng, s: int, opts: Array) -> int:
+	for i in opts.size():
+		if opts[i]["k"] == "mon_nc":
+			return i
 	var cur: int = eng.strength(s)
 	var need := _need(eng, s)
 	var end_i := opts.size() - 1
@@ -1325,3 +1410,27 @@ func _before_battle(eng, s: int, opts: Array) -> int:
 		if k == "foe_rand" and eng.hand[eng.other(s)].size() >= 2:
 			return i
 	return opts.size() - 1
+
+
+## Monumento da costruire ora (indice 0..2) oppure -1: conviene se l'effetto per i Round che restano vale
+## più delle Carte Supporto spese, tenendo almeno 1 carta in mano.
+func ai_build_pick(eng, s: int) -> int:
+	if not eng.exp_mon:
+		return -1
+	var base := {"town_pol": 1.3, "cath_pol": 0.9, "castle_pol": 0.8, "sofia": 1.5, "basil": 0.6, "spass": 0.5,
+		"town_sve": 1.2, "cath_sve": 0.8, "kronor": 0.6, "topkapi": 0.7, "jan": 0.8, "mosque": 0.9,
+		"stefan": 0.8, "schon": 0.8, "town_sri": 0.9}
+	var rem: float = eng.rounds_total - eng.round_no + 1
+	var best := -1
+	var bv := 0.3
+	for i in eng.mon_buildable(s, eng.phase == "reset"):
+		var cost: int = eng.mon_cost(s, i)
+		var spare: int = eng.hand[s].size() - cost
+		if spare < 1:
+			continue
+		var key: String = D.monument(eng.nat(s), i)["key"]
+		var v: float = float(base.get(key, 0.7)) * rem - 0.8 * cost - (0.6 if spare < 2 else 0.0)
+		if v > bv:
+			bv = v
+			best = i
+	return best

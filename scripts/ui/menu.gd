@@ -19,9 +19,11 @@ var solo_me := ""               # Solitario: la nazione del giocatore (l'altra �
 var automa_lvl := 0             # 0 Base, 1 Avanzato
 var automa_row: Control
 var opt_rows: Array = []
+var xp := {"monuments": false, "emissaries": false, "fire": false}     # espansioni Kickstarter
 var msg: Label
 var scen_box: VBoxContainer
 var seats_box: VBoxContainer
+var seats_scroll: ScrollContainer
 var info_lbl: Label
 
 
@@ -39,6 +41,7 @@ func _ready() -> void:
 		extended = st["ext"]
 		solo_me = st.get("solo_me", "")
 		automa_lvl = st.get("alvl", 0)
+		xp = st.get("xp", xp).duplicate()
 	for nt in D.NATION_ORDER:
 		if not modes.has(nt):
 			modes[nt] = 2
@@ -128,17 +131,47 @@ func _ready() -> void:
 	rv.add_theme_constant_override("separation", 10)
 	right.add_child(rv)
 	rv.add_child(UI.heading("Chi guida le Nazioni", 30))
+	seats_scroll = ScrollContainer.new()
+	seats_scroll.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
+	rv.add_child(seats_scroll)
 	seats_box = VBoxContainer.new()
-	seats_box.add_theme_constant_override("separation", 8)
-	rv.add_child(seats_box)
+	seats_box.add_theme_constant_override("separation", 6)
+	seats_box.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	seats_scroll.add_child(seats_box)
 	rv.add_child(HSeparator.new())
 	rv.add_child(UI.heading("Opzioni", 26))
-	opt_rows.append(_toggle("Modalità Avanzata", "Mazzo Ordini Avanzati, Energia e abilità avanzate del Titano", advanced, func(v): advanced = v))
+	var orow := HBoxContainer.new()
+	orow.add_theme_constant_override("separation", 14)
+	var ol := UI.label("Varianti", 22, Color.WHITE, UI.font_head_b)
+	ol.custom_minimum_size.x = 170
+	orow.add_child(ol)
+	for kv in [["Modalità Avanzata", "Mazzo Ordini Avanzati, Energia e abilità avanzate del Titano", advanced, func(v): advanced = v],
+			["Presa della Capitale", "Le Capitali si conquistano invece di essere distrutte: 2 PV a fine partita per ogni Capitale controllata", capital_capture, func(v): capital_capture = v],
+			["Partita estesa", "4 Round invece di 3 (sconto 1 nel 3° Round, 2 nel 4°)", extended, func(v): extended = v]]:
+		var cb := CheckBox.new()
+		cb.text = kv[0]
+		cb.tooltip_text = kv[1]
+		cb.button_pressed = kv[2]
+		var f: Callable = kv[3]
+		cb.toggled.connect(func(v): f.call(v))
+		orow.add_child(cb)
+	opt_rows.append(orow)
 	rv.add_child(opt_rows[-1])
-	opt_rows.append(_toggle("Presa della Capitale", "Le Capitali si conquistano invece di essere distrutte: 2 PV a fine partita per ogni Capitale controllata", capital_capture, func(v): capital_capture = v))
-	rv.add_child(opt_rows[-1])
-	opt_rows.append(_toggle("Partita estesa", "4 Round invece di 3 (sconto 1 nel 3° Round, 2 nel 4°)", extended, func(v): extended = v))
-	rv.add_child(opt_rows[-1])
+	var xrow := HBoxContainer.new()
+	xrow.add_theme_constant_override("separation", 14)
+	var xl := UI.label("Espansioni", 22, Color.WHITE, UI.font_head_b)
+	xl.custom_minimum_size.x = 170
+	xrow.add_child(xl)
+	for kv in [["monuments", "Monumenti", "Ogni Nazione ha 3 Monumenti da costruire con le Carte Supporto"], ["emissaries", "Emissari del Re", "3 Obiettivi Nazione segreti: il primo dà un Emissario che accompagna un'Armata, poi 3 e 5 PV"], ["fire", "Pioggia di Fuoco", "Un'Artiglieria di Fuoco per Nazione: conta come Artiglieria e tira anche 1 Dado Fanteria"]]:
+		var cb := CheckBox.new()
+		cb.text = kv[1]
+		cb.tooltip_text = kv[2]
+		cb.button_pressed = xp[kv[0]]
+		var key: String = kv[0]
+		cb.toggled.connect(func(v): xp[key] = v)
+		xrow.add_child(cb)
+	opt_rows.append(xrow)
+	rv.add_child(xrow)
 	automa_row = _segmented("Automa", ["Base", "Avanzato"], automa_lvl, func(k): automa_lvl = k, 170)
 	automa_row.tooltip_text = "Livello Avanzato: l'Automa esegue anche le azioni con la stella delle sue carte"
 	rv.add_child(automa_row)
@@ -183,7 +216,7 @@ func _center() -> void:
 
 
 func _store() -> void:
-	main.menu_state = {"n": nplayers, "scen": scen_id, "modes": modes.duplicate(), "names": names.duplicate(), "speed": speed, "adv": advanced, "cap": capital_capture, "ext": extended, "solo_me": solo_me, "alvl": automa_lvl}
+	main.menu_state = {"n": nplayers, "scen": scen_id, "modes": modes.duplicate(), "names": names.duplicate(), "speed": speed, "adv": advanced, "cap": capital_capture, "ext": extended, "solo_me": solo_me, "alvl": automa_lvl, "xp": xp.duplicate()}
 
 
 func _scen_nations() -> Array:
@@ -205,6 +238,7 @@ func _refresh_scen() -> void:
 		var sid: String = s["id"]
 		var b := Button.new()
 		b.custom_minimum_size = Vector2(700, 58)
+		b.clip_text = true
 		b.alignment = HORIZONTAL_ALIGNMENT_LEFT
 		var nn := []
 		for c in s["nations"]:
@@ -235,22 +269,23 @@ func _refresh_seats() -> void:
 		r.visible = nplayers != 1
 	if nplayers == 1 and not solo_me in _scen_nations():
 		solo_me = _scen_nations()[0]
+	seats_scroll.custom_minimum_size = Vector2(980, mini(_scen_nations().size() * 80, 372))
 	for nt in _scen_nations():
 		var row := PanelContainer.new()
 		row.add_theme_stylebox_override("panel", UI.panel_style(Color(UI.ndark(nt), 0.9), UI.ncol(nt), 2, 8))
 		var hb := HBoxContainer.new()
 		hb.add_theme_constant_override("separation", 10)
 		row.add_child(hb)
-		hb.add_child(UI.icon_rect(UI.banner(nt), Vector2(32, 64)))
+		hb.add_child(UI.icon_rect(UI.banner(nt), Vector2(28, 56)))
 		var vb := VBoxContainer.new()
 		vb.custom_minimum_size.x = 300
-		var nl := UI.label(D.NATIONS[nt]["name"], 22, Color.WHITE, UI.font_head_b)
+		var nl := UI.label(D.NATIONS[nt]["name"], 19, Color.WHITE, UI.font_head_b)
 		vb.add_child(nl)
 		var le := LineEdit.new()
 		le.text = names[nt]
 		le.max_length = 20
-		le.custom_minimum_size = Vector2(280, 40)
-		le.add_theme_font_size_override("font_size", 20)
+		le.custom_minimum_size = Vector2(280, 32)
+		le.add_theme_font_size_override("font_size", 17)
 		var ntt: String = nt
 		le.text_changed.connect(func(t): names[ntt] = t)
 		vb.add_child(le)
@@ -262,7 +297,7 @@ func _refresh_seats() -> void:
 			for k in 2:
 				var b := Button.new()
 				b.text = ["Tu", "Automa"][k]
-				b.custom_minimum_size = Vector2(200, 52)
+				b.custom_minimum_size = Vector2(200, 44)
 				b.add_theme_font_size_override("font_size", 20)
 				var on: bool = (solo_me == nt) == (k == 0)
 				b.add_theme_stylebox_override("normal", UI.panel_style(UI.GOLD if on else Color("#1d1f24"), UI.GOLD if on else Color("#3a3833"), 2, 4))
@@ -280,7 +315,7 @@ func _refresh_seats() -> void:
 		for k in MODES.size():
 			var b := Button.new()
 			b.text = MODES[k]
-			b.custom_minimum_size = Vector2(132, 52)
+			b.custom_minimum_size = Vector2(132, 44)
 			b.add_theme_font_size_override("font_size", 18)
 			var on: bool = modes[nt] == k
 			b.add_theme_stylebox_override("normal", UI.panel_style(UI.GOLD if on else Color("#1d1f24"), UI.GOLD if on else Color("#3a3833"), 2, 4))
@@ -363,7 +398,8 @@ func _config() -> Dictionary:
 	var speeds := [1.0, 0.5, 0.15, 0.0]
 	if nplayers == 1:
 		return {"seats": seats, "scenario": scen_id, "ai_delay": speeds[speed], "solo": true, "automa_adv": automa_lvl == 1, "advanced": false, "capital_capture": false, "extended": false}
-	return {"seats": seats, "scenario": scen_id, "ai_delay": speeds[speed], "advanced": advanced, "capital_capture": capital_capture, "extended": extended}
+	return {"seats": seats, "scenario": scen_id, "ai_delay": speeds[speed], "advanced": advanced, "capital_capture": capital_capture, "extended": extended,
+		"monuments": xp["monuments"], "emissaries": xp["emissaries"], "fire": xp["fire"]}
 
 
 func _on_start() -> void:

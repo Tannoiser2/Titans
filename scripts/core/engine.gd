@@ -105,6 +105,20 @@ var automa_used: Array = []
 var automa_card := -1            # carta Automa in corso
 var solo_lost := false           # l'Automa ha preso la Capitale del giocatore
 
+# espansioni Kickstarter
+var exp_mon := false             # Monumenti
+var exp_emi := false             # Emissari del Re
+var exp_fire := false            # Pioggia di Fuoco
+var mon: Array = []              # per posto: 3 × {built, gone, r, r2, under}
+var mon_built_turn := {}         # posto -> turno dell'ultima costruzione
+var mon_declined := {}           # posto -> turno in cui ha rinunciato a costruire nella Fase A
+var mon_used := {}               # "posto_chiave" -> turno di utilizzo
+var emi: Array = []              # per posto: {} oppure {k, r, b, on}; r = -2 se è in Battaglia come attaccante
+var emi_pool: Array = []         # Emissari ancora disponibili
+var nobj_hand: Array = []        # Obiettivi Nazione ancora da completare (indici 0..2)
+var nobj_done: Array = []
+var fire_free: Array = []        # per posto: l'Artiglieria di Fuoco è nella riserva
+
 
 # ================================================================ preparazione
 
@@ -123,6 +137,9 @@ func setup(config: Dictionary) -> void:
 	solo = bool(config.get("solo", false))
 	automa = -1
 	automa_adv = bool(config.get("automa_adv", false))
+	exp_mon = bool(config.get("monuments", false)) and not solo
+	exp_emi = bool(config.get("emissaries", false)) and not solo
+	exp_fire = bool(config.get("fire", false)) and not solo
 	for s in config["seats"]:
 		if bool(s.get("automa", false)):
 			automa = players.size()
@@ -144,7 +161,7 @@ func setup(config: Dictionary) -> void:
 	central = int(scen["central"])
 	reg = {}
 	for r in regions:
-		reg[r] = {"own": -1, "n": {"F": 0, "K": 0, "A": 0, "T": 0}, "tok": -1, "cap": -1, "capctrl": -1, "fort": false}
+		reg[r] = {"own": -1, "n": {"F": 0, "K": 0, "A": 0, "T": 0}, "tok": -1, "cap": -1, "capctrl": -1, "fort": false, "fire": -1, "mon": []}
 	reserve = []
 	titan = []
 	vp = []
@@ -159,7 +176,23 @@ func setup(config: Dictionary) -> void:
 	start_regions = []
 	capital_alive = []
 	stats = []
+	mon = []
+	emi = []
+	emi_pool = []
+	nobj_hand = []
+	nobj_done = []
+	fire_free = []
+	mon_built_turn = {}
+	mon_declined = {}
+	mon_used = {}
 	for s in n:
+		mon.append([])
+		for i in 3:
+			mon[s].append({"built": false, "gone": false, "r": -1, "r2": -1, "under": []})
+		emi.append({})
+		nobj_hand.append([])
+		nobj_done.append([])
+		fire_free.append(exp_fire)
 		reserve.append({"F": D.UNIT_COUNT["F"], "K": D.UNIT_COUNT["K"], "A": D.UNIT_COUNT["A"]})
 		titan.append("up")
 		vp.append(0)
@@ -472,7 +505,7 @@ func can_attack(s: int, r: int) -> bool:
 
 func move_targets(s: int, from: int) -> Array:
 	var out := []
-	for a in adj(from):
+	for a in move_adj(from):
 		var o := owner(a)
 		if o >= 0 and o != s and not can_attack(s, a):
 			continue
@@ -624,6 +657,16 @@ func _initial_setup() -> void:
 	for s in n:
 		var ss := (first + s) % n
 		await buy_nation_card(ss, 0, "buy_start")
+	if exp_emi:
+		emi_pool = D.EMISSARY_KEYS.duplicate()
+		_shuffle(emi_pool)
+		emi_pool = emi_pool.slice(0, 3 if n == 2 else n)
+		for s in n:
+			nobj_hand[s] = [0, 1, 2]
+		var names := []
+		for k in emi_pool:
+			names.append(D.EMISSARIES[k])
+		log_msg("Emissari del Re: ognuno riceve i 3 Obiettivi Nazione. Emissari disponibili: %s." % "; ".join(names))
 	# obiettivi segreti: 4 a testa, se ne tiene 1 e si passa a destra
 	var packs := []
 	for s in n:
@@ -783,10 +826,11 @@ func _turn(s: int) -> void:
 	if advanced:
 		_gain_energy(s)
 	_after_pick()
+	await _mon_after_a(s)
 	# ---- Fase B: battaglie
 	phase = "battles"
 	battles_started = battles.size()
-	_check_objectives_all()
+	await _check_objectives_all()
 	while not battles.is_empty():
 		var bi := 0
 		if battles.size() > 1:
@@ -797,10 +841,12 @@ func _turn(s: int) -> void:
 		var b: Dictionary = battles[bi]
 		battles.remove_at(bi)
 		await _resolve_battle(b)
-		_check_objectives_all()
+		await _check_objectives_all()
+	_mon_auto(s)
 	# ---- Fase C: 1 Carta Supporto
 	phase = "draw"
 	await _take_support(s, 1, "draw")
+	await _mon_after_c(s)
 	# ---- Fase D: ripristino
 	phase = "reset"
 	while hand[s].size() > HAND_LIMIT:
@@ -819,8 +865,11 @@ func _turn(s: int) -> void:
 			log_msg("%s schiera il Titano in %s." % [pname(s), rname(tr)])
 			_fx("deploy", {"seat": s, "t": "T", "r": tr})
 	await _post_phase_d(s)
-	_check_objectives_all()
-	_end_turn_holds(s)
+	_mon_auto(s)
+	await _mon_after_d(s)
+	await _check_objectives_all()
+	await _end_turn_holds(s)
+	_fix_emissaries()
 	cur_order = -1
 	phase = "play"
 	changed.emit()
@@ -863,12 +912,16 @@ func _do_actions(s: int) -> void:
 		var tr := titan_region(s)
 		if tr > 0 and can_adv(s, "titan_inf") and reserve[s]["F"] > 0:
 			opts.append({"label": "Abilità Avanzata (7 Energia): +1 Fanteria nella Regione del Titano", "action": "_titan_inf", "ok": true})
+		opts.append_array(mon_turn_options(s, false))
 		opts.append({"label": "Fine delle azioni", "action": ""})
 		var k := await pick(s, "action", "Ordini: scegli un'azione (in qualsiasi ordine)", opts, {"order": cur_order})
 		var a: String = opts[k]["action"]
 		if a == "":
 			break
 		if not opts[k]["ok"]:
+			continue
+		if a.begins_with("_mon"):
+			await _mon_turn_action(s, opts[k])
 			continue
 		if a == "_titan_inf":
 			_pay_adv(s, "titan_inf")
@@ -877,6 +930,7 @@ func _do_actions(s: int) -> void:
 			_put(rr, s, "F")
 			log_msg("%s schiera 1 Fanteria in %s accanto al Titano." % [pname(s), rname(rr)])
 			_fx("deploy", {"seat": s, "t": "F", "r": rr})
+			await _maybe_fire(s, rr, "F")
 			changed.emit()
 			continue
 		var done := await _do_action(s, a)
@@ -911,7 +965,7 @@ func action_possible(s: int, a: String) -> bool:
 func fort_targets(s: int) -> Array:
 	var out := []
 	for r in controlled(s):
-		if not reg[r]["fort"]:
+		if not reg[r]["fort"] and reg[r]["mon"].is_empty():
 			out.append(r)
 	return out
 
@@ -969,7 +1023,7 @@ func _move_one(s: int, t: String, ctx: String, no_battle := false) -> bool:
 	var dst := await pick_region(s, "move_to", "Muovi %s da %s: verso quale Regione?" % [D.UNIT_NAME[ut], rname(src)], dests, true, {"from": src, "unit": ut})
 	if dst < 0:
 		return false
-	_move_units(s, src, dst, {ut: 1})
+	await _move_with_spass(s, src, dst, {ut: 1}, no_battle)
 	return true
 
 
@@ -995,11 +1049,25 @@ func _move_army(s: int, nmax: int) -> bool:
 	for u in sel:
 		cnt[u] = cnt.get(u, 0) + 1
 	army_moved = sel.size()
-	_move_units(s, src, dst, cnt)
+	await _move_with_spass(s, src, dst, cnt, false)
 	return true
 
 
 func _move_units(s: int, src: int, dst: int, cnt: Dictionary) -> void:
+	var moving := 0
+	for u in cnt:
+		moving += int(cnt[u])
+	var emi_go := false
+	if exp_emi and not emi[s].is_empty() and emi[s]["r"] == src:
+		if units_total(src) - moving <= 0:
+			emi_go = true
+		else:
+			var to_battle := _enemy_units(s, dst) or not _battle_at(dst, s).is_empty()
+			emi_go = await yesno(s, "emi_move", "L'Emissario del Re (%s) segue le Unità che muovi?" % D.EMISSARIES[emi[s]["k"]], {"battle_move": to_battle}, "Resta", "Segue")
+	var fire_go := false
+	if cnt.has("A") and reg[src]["fire"] == s:
+		fire_go = true
+		reg[src]["fire"] = -1
 	var desc := []
 	for u in cnt:
 		_take(src, u, cnt[u])
@@ -1017,9 +1085,17 @@ func _move_units(s: int, src: int, dst: int, cnt: Dictionary) -> void:
 	if not b.is_empty():
 		for u in cnt:
 			for i in cnt[u]:
-				b["u"].append({"t": u, "from": src})
+				var e := {"t": u, "from": src}
+				if u == "A" and fire_go:
+					e["fire"] = true
+					fire_go = false
+				b["u"].append(e)
+		if emi_go:
+			emi[s]["r"] = -2
+			emi[s]["b"] = dst
 		if joined:
 			log_msg("%s si unisce alla Battaglia in %s con %s." % [pname(s), rname(dst), ", ".join(desc)])
+		_check_monuments()
 		changed.emit()
 		return
 	# regione libera, propria o nemica senza unità
@@ -1028,7 +1104,14 @@ func _move_units(s: int, src: int, dst: int, cnt: Dictionary) -> void:
 		_enter_enemy_free(s, dst, o)
 	for u in cnt:
 		_put(dst, s, u, cnt[u])
+	if fire_go:
+		reg[dst]["fire"] = s
+	if emi_go:
+		emi[s]["r"] = dst
 	log_msg("%s muove %s da %s a %s." % [pname(s), ", ".join(desc), rname(src), rname(dst)])
+	if o != s:
+		_gained(s, dst)
+	_check_monuments()
 	changed.emit()
 
 
@@ -1099,6 +1182,7 @@ func _deploy(s: int, t: String) -> bool:
 	_put(r, s, u)
 	log_msg("%s schiera 1 %s in %s." % [pname(s), D.UNIT_NAME[u], rname(r)])
 	_fx("deploy", {"seat": s, "t": u, "r": r})
+	await _maybe_fire(s, r, u)
 	return true
 
 
@@ -1172,7 +1256,7 @@ func _pre_phase_a(s: int) -> void:
 		var srcs := []
 		for r in regions:
 			if reg[r]["own"] == s and reg[r]["n"]["F"] > 0:
-				for a in adj(r):
+				for a in move_adj(r):
 					if owner(a) == s:
 						srcs.append(r)
 						break
@@ -1181,11 +1265,13 @@ func _pre_phase_a(s: int) -> void:
 		if await yesno(s, "nc_turn_a", "Usare la Carta Nazione? %s" % D.nation_card_text(nat(s), nowned[s][k]["i"]), {"nation_card": nowned[s][k]["i"]}):
 			var src := await pick_region(s, "move_from", "Muovi 1 Fanteria: da quale Regione?", srcs, true, {"unit": "F"})
 			if src >= 0:
-				var dl := adj(src).filter(func(x): return owner(x) == s)
+				var dl := move_adj(src).filter(func(x): return owner(x) == s)
 				var dst := await pick_region(s, "move_to", "Verso quale tua Regione?", dl, true, {"from": src, "unit": "F"})
 				if dst >= 0:
 					_take(src, "F")
 					_put(dst, s, "F")
+					if exp_emi and not emi[s].is_empty() and emi[s]["r"] == src and units_total(src) == 0:
+						emi[s]["r"] = dst
 					log_msg("%s muove 1 Fanteria da %s a %s (Carta Nazione)." % [pname(s), rname(src), rname(dst)])
 					_fx("move", {"seat": s, "from": src, "to": dst, "units": {"F": 1}})
 	# scambio di Carte Ordini (Modalità Avanzata)
@@ -1223,6 +1309,7 @@ func _post_phase_d(s: int) -> void:
 				nowned[s][k]["rot"] = true
 				log_msg("%s schiera 1 Fanteria in %s (Carta Nazione)." % [pname(s), rname(r)])
 				_fx("deploy", {"seat": s, "t": "F", "r": r})
+				await _maybe_fire(s, r, "F")
 
 
 # ================================================================ battaglia
@@ -1238,7 +1325,14 @@ func _resolve_battle(b: Dictionary) -> void:
 			_enter_enemy_free(att, r, o)
 		for u in b["u"]:
 			_put(r, att, u["t"])
+			if u.get("fire", false):
+				reg[r]["fire"] = att
+		if exp_emi and not emi[att].is_empty() and emi[att]["r"] == -2 and emi[att].get("b", -1) == r:
+			emi[att]["r"] = r
 		log_msg("%s entra in %s senza combattere." % [pname(att), rname(r)])
+		if o != att:
+			_gained(att, r)
+		_check_monuments()
 		changed.emit()
 		return
 	phase = "battle"
@@ -1246,7 +1340,7 @@ func _resolve_battle(b: Dictionary) -> void:
 		"r": r, "att": att, "def": dfn, "u_att": b["u"], "dice": {att: [], dfn: []}, "bonus": {att: 0, dfn: 0},
 		"first": dfn, "acting": -1, "done": {}, "nab": {}, "titan_ab": {}, "moved_in": {}, "nc_used": {att: [], dfn: []},
 		"sup_used": {att: 0, dfn: 0}, "sup_any": {att: false, dfn: false}, "ignore_req": {}, "size0": {},
-		"winner": -1, "diff": 0,
+		"winner": -1, "diff": 0, "emi": {}, "mon_nc": {}, "cap_region": reg[r]["cap"] >= 0,
 	}
 	battle = bt
 	log_msg("Battaglia in %s: %s attacca %s." % [rname(r), pname(att), pname(dfn)])
@@ -1267,6 +1361,11 @@ func _resolve_battle(b: Dictionary) -> void:
 	# prima della battaglia
 	for s in [att, dfn]:
 		await _before_battle(s)
+	# Emissari presenti in Battaglia
+	if exp_emi:
+		for s in [att, dfn]:
+			if emi_in_battle(s):
+				bt["emi"][s] = {"k": emi[s]["k"], "on": emi[s]["on"]}
 	# dadi
 	for s in [att, dfn]:
 		for t in D.UNITS:
@@ -1275,9 +1374,15 @@ func _resolve_battle(b: Dictionary) -> void:
 				k = mini(k, 1)
 			for i in k:
 				_roll_die(s, t, true)
+		if fire_in_battle(s) and can_roll(s, "F"):
+			_roll_die(s, "F", true)
+			log_msg("L'Artiglieria di Fuoco di %s tira anche 1 Dado Fanteria." % pname(s))
 	bt["rolled"] = true
 	_apply_nation_ability(att)
 	_apply_nation_ability(dfn)
+	for s in [att, dfn]:
+		if bt["emi"].has(s) and bt["emi"][s]["on"]:
+			await _emissary_effect(s)
 	log_msg("Forza iniziale: %s %d, %s %d." % [pname(att), strength(att), pname(dfn), strength(dfn)])
 	_fx("dice", {})
 	changed.emit()
@@ -1315,9 +1420,11 @@ func _resolve_battle(b: Dictionary) -> void:
 	stats[loser]["lost"] += 1
 	await _after_battle_cards(att)
 	await _after_battle_cards(dfn)
-	_battle_objectives(bt)
+	await _battle_objectives(bt)
 	battle = {}
 	phase = "battles"
+	_check_monuments()
+	_fix_emissaries()
 	changed.emit()
 
 
@@ -1606,7 +1713,7 @@ func _max_die(s: int) -> void:
 func _move_in_sources(s: int, t: String) -> Array:
 	var out := []
 	var r: int = battle["r"]
-	for a in adj(r):
+	for a in move_adj(r):
 		if reg[a]["own"] == s and (units_total(a) > 0 if t == "X" else reg[a]["n"][t] > 0):
 			out.append(a)
 	return out
@@ -1627,15 +1734,31 @@ func _move_in(s: int, t: String) -> void:
 			ut = o[await pick(s, "move_type", "Quale Unità entra in Battaglia?", o)]["unit"]
 		else:
 			ut = types[0]
+	var fire_go: bool = ut == "A" and reg[src]["fire"] == s
+	if fire_go:
+		reg[src]["fire"] = -1
 	_take(src, ut)
 	if s == battle["att"]:
-		battle["u_att"].append({"t": ut, "from": src})
+		var e := {"t": ut, "from": src}
+		if fire_go:
+			e["fire"] = true
+		battle["u_att"].append(e)
 	else:
 		_put(battle["r"], s, ut)
-	log_msg("%s porta 1 %s da %s nella Battaglia." % [pname(s), D.UNIT_NAME[ut], rname(src)])
+		if fire_go:
+			reg[battle["r"]]["fire"] = s
+	if exp_emi and not emi[s].is_empty() and emi[s]["r"] == src and units_total(src) == 0:
+		if s == battle["att"]:
+			emi[s]["r"] = -2
+			emi[s]["b"] = battle["r"]
+		else:
+			emi[s]["r"] = battle["r"]
+	log_msg("%s porta 1 %s da %s nella Battaglia." % [pname(s), D.UNIT_NAME[ut] if not fire_go else D.FIRE_NAME, rname(src)])
 	_fx("move", {"seat": s, "from": src, "to": battle["r"], "units": {ut: 1}})
 	if battle.get("rolled", false):
 		_roll_die(s, ut)
+		if fire_go:
+			_roll_die(s, "F")
 	_apply_nation_ability(s)
 	changed.emit()
 
@@ -1643,7 +1766,7 @@ func _move_in(s: int, t: String) -> void:
 func _move_out(o: int) -> void:
 	var r: int = battle["r"]
 	var dests := controlled(o).filter(func(x): return x != r)
-	var near := dests.filter(func(x): return x in adj(r))
+	var near := dests.filter(func(x): return x in move_adj(r))
 	if not near.is_empty():
 		dests = near
 	if dests.is_empty():
@@ -1655,14 +1778,19 @@ func _move_out(o: int) -> void:
 	var sel := await pick_cards(o, "move_out", "Devi spostare 1 Unità fuori dalla Battaglia", items, 1, 1, {"units": true})
 	var ut: String = sel[0]
 	var dst := await pick_region(o, "move_out_to", "In quale tua Regione sposti la %s?" % D.UNIT_NAME[ut], dests, false)
+	var fire_go := false
 	if o == battle["att"]:
-		for i in battle["u_att"].size():
-			if battle["u_att"][i]["t"] == ut:
-				battle["u_att"].remove_at(i)
-				break
+		var idx := _att_unit_index(ut)
+		fire_go = battle["u_att"][idx].get("fire", false)
+		battle["u_att"].remove_at(idx)
 	else:
+		if ut == "A" and reg[r]["fire"] == o and reg[r]["n"]["A"] == 1:
+			fire_go = true
+			reg[r]["fire"] = -1
 		_take(r, ut)
 	_put(dst, o, ut)
+	if fire_go:
+		reg[dst]["fire"] = o
 	log_msg("%s sposta 1 %s fuori dalla Battaglia, in %s." % [pname(o), D.UNIT_NAME[ut], rname(dst)])
 	_fx("move", {"seat": o, "from": r, "to": dst, "units": {ut: 1}})
 
@@ -1768,6 +1896,8 @@ func _battle_phase(s: int) -> void:
 				"sri":
 					if not hand[s].is_empty() and not sface.is_empty():
 						opts.append({"label": "Abilità del Titano: scarta 1 Carta Supporto e prendine 1 scoperta", "k": "titan"})
+		if not _mon_nc_cards(s).is_empty():
+			opts.append({"label": "Monumento Municipio: gioca gratis 1 delle prime 3 Carte Nazione del mazzo", "k": "mon_nc"})
 		if has_titan(s) and can_adv(s, "die_k") and can_roll(s, "K"):
 			opts.append({"label": "Abilità Avanzata (6 Energia): aggiungi 1 Dado Cavalleria", "k": "adv_die_k"})
 		if has_titan(s) and can_adv(s, "reroll_any") and not battle["dice"][s].is_empty():
@@ -1834,6 +1964,8 @@ func _battle_phase(s: int) -> void:
 					for it in sel:
 						_reroll(it[0], it[1])
 						log_msg("Il Bogatyr di %s fa ritirare un Dado di %s: %d." % [pname(s), pname(it[0]), battle["dice"][it[0]][it[1]]["v"]])
+			"mon_nc":
+				await _mon_town_sri(s)
 			"adv_reroll":
 				_pay_adv(s, "reroll_any")
 				var sel := await pick_dice(s, "reroll", "Scegli i Dadi da ritirare", _dice_items(s), 1, 99)
@@ -1915,32 +2047,56 @@ func _apply_outcome(bt: Dictionary, winner: int, loser: int, diff: int) -> void:
 				items.append(t)
 		var sel := await pick_cards(loser, "casualties", "Hai perso: elimina %d Unità" % kill, items, kill, kill, {"units": true, "battle": true})
 		for t in sel:
+			var fire_dead := false
 			if loser == att:
-				for i in bt["u_att"].size():
-					if bt["u_att"][i]["t"] == t:
-						bt["u_att"].remove_at(i)
-						break
+				var idx := _att_unit_index(t)
+				fire_dead = bt["u_att"][idx].get("fire", false)
+				bt["u_att"].remove_at(idx)
 			else:
 				reg[r]["n"][t] -= 1
+				if t == "A" and reg[r]["fire"] == loser and reg[r]["n"]["A"] == 0:
+					fire_dead = true
+					reg[r]["fire"] = -1
 			if t == "T":
 				titan_killed = true
 				titan[loser] = "down" if loser == att else "up"
+			elif fire_dead:
+				fire_free[loser] = true
 			else:
 				reserve[loser][t] += 1
-			log_msg("%s perde 1 %s." % [pname(loser), D.UNIT_NAME[t]])
+			log_msg("%s perde 1 %s." % [pname(loser), D.FIRE_NAME if fire_dead else D.UNIT_NAME[t]])
 		_fx("casualties", {"seat": loser, "r": r})
+		if exp_mon:
+			for p in n:
+				var m := mon_standing(p, "stefan")
+				if not m.is_empty() and (r == m["r"] or r in adj(m["r"])):
+					draw_support(p, 2, true)
+					log_msg("Cattedrale di Santo Stefano: %s pesca 2 Carte Supporto." % pname(p))
+	bt["wiped"] = kill >= lsize
 	# ritirata
 	if loser == att:
+		var back := -1
 		for u in bt["u_att"]:
 			var src: int = u["from"]
 			if owner(src) == att or owner(src) == -1 or reg[src]["own"] == att:
 				_put(src, att, u["t"])
+				if u.get("fire", false):
+					reg[src]["fire"] = att
+				if back < 0:
+					back = src
 			else:
 				# la regione d'origine non è più sua (raro): l'unità torna nella riserva
 				if u["t"] == "T":
 					titan[att] = "up"
+				elif u.get("fire", false):
+					fire_free[att] = true
 				else:
 					reserve[att][u["t"]] += 1
+		if exp_emi and not emi[att].is_empty() and emi[att]["r"] == -2 and emi[att].get("b", -1) == r:
+			if back >= 0:
+				emi[att]["r"] = back
+			else:
+				_lose_emissary(att)
 		if not bt["u_att"].is_empty():
 			log_msg("%s ritira le sue Unità." % pname(att))
 		_fx("retreat", {"seat": att, "r": r})
@@ -1949,11 +2105,14 @@ func _apply_outcome(bt: Dictionary, winner: int, loser: int, diff: int) -> void:
 		var cnt := 0
 		for t in D.UNITS:
 			cnt += left[t]
+		var had_fire: bool = reg[r]["fire"] == dfn
+		reg[r]["fire"] = -1
 		reg[r]["n"] = {"F": 0, "K": 0, "A": 0, "T": 0}
 		reg[r]["own"] = -1
+		var emi_here: bool = exp_emi and not emi[dfn].is_empty() and emi[dfn]["r"] == r
 		if cnt > 0:
-			var mine := adj(r).filter(func(x): return owner(x) == dfn)
-			var free := adj(r).filter(func(x): return owner(x) == -1)
+			var mine := move_adj(r).filter(func(x): return owner(x) == dfn)
+			var free := move_adj(r).filter(func(x): return owner(x) == -1)
 			var dests: Array = mine if not mine.is_empty() else free
 			if dests.is_empty():
 				for t in D.UNITS:
@@ -1962,20 +2121,42 @@ func _apply_outcome(bt: Dictionary, winner: int, loser: int, diff: int) -> void:
 							titan[dfn] = "up"
 						else:
 							reserve[dfn][t] += left[t]
+				if had_fire:
+					reserve[dfn]["A"] -= 1
+					fire_free[dfn] = true
+				bt["wiped"] = true
+				if emi_here:
+					_lose_emissary(dfn)
 				log_msg("%s non ha dove ritirarsi: le Unità rimaste sono distrutte." % pname(dfn))
 			else:
 				var dst := await pick_region(dfn, "retreat", "Ritirata: in quale Regione adiacente si ritirano le tue Unità?", dests, false)
+				var was_free := owner(dst) == -1
 				for t in D.UNITS:
 					if left[t] > 0:
 						_put(dst, dfn, t, left[t])
+				if had_fire:
+					reg[dst]["fire"] = dfn
+				if emi_here:
+					emi[dfn]["r"] = dst
 				log_msg("%s si ritira in %s." % [pname(dfn), rname(dst)])
 				_fx("move", {"seat": dfn, "from": r, "to": dst, "units": left})
+				if was_free:
+					_gained(dfn, dst)
+		else:
+			if had_fire:
+				fire_free[dfn] = true
+			if emi_here:
+				_lose_emissary(dfn)
 		# l'attaccante entra
 		var g: Dictionary = reg[r]
 		if g["tok"] >= 0:
 			g["tok"] = -1
 		for u in bt["u_att"]:
 			_put(r, att, u["t"])
+			if u.get("fire", false):
+				reg[r]["fire"] = att
+		if exp_emi and not emi[att].is_empty() and emi[att]["r"] == -2 and emi[att].get("b", -1) == r:
+			emi[att]["r"] = r
 		_fx("move", {"seat": att, "from": -1, "to": r, "units": {}})
 		if g["fort"]:
 			g["fort"] = false
@@ -1998,6 +2179,20 @@ func _apply_outcome(bt: Dictionary, winner: int, loser: int, diff: int) -> void:
 	if titan_killed:
 		_add_vp(winner, 1, "Titano eliminato")
 	bt["titan_killed"] = titan_killed
+	if winner == att:
+		_gained(att, r)
+	# Emissari: il segnalino si gira dopo la vittoria e torna attivo nella Battaglia successiva
+	for p in bt["emi"]:
+		var was_on: bool = bt["emi"][p]["on"]
+		if was_on and p == winner and bt["emi"][p]["k"] == "vp":
+			_add_vp(p, 1, "Emissario del Re")
+		if emi[p].is_empty():
+			continue
+		if not was_on:
+			emi[p]["on"] = true
+		elif p == winner:
+			emi[p]["on"] = false
+	_check_monuments()
 	changed.emit()
 
 
@@ -2008,17 +2203,25 @@ func _battle_objectives(bt: Dictionary) -> void:
 	bt["info"] = {"winner": w, "loser": other(w), "r": bt["r"], "diff": bt["diff"], "w_att": w == bt["att"],
 		"w_size0": bt["size0"][w], "l_size0": bt["size0"][other(w)]}
 	for s in [bt["att"], bt["def"]]:
-		_try_objectives(s, bt)
+		await _try_objectives(s, bt)
 
 
 func _try_objectives(s: int, bt := {}) -> void:
 	if obj_turn[s] == turn_no:
 		return
 	var best := -1
+	var bv := -1.0
 	for o in obj_hand[s]:
 		if objective_met(s, o, bt):
 			if best < 0 or int(D.OBJECTIVES[o]["vp"]) > int(D.OBJECTIVES[best]["vp"]):
 				best = o
+				bv = float(D.OBJECTIVES[o]["vp"])
+	if exp_emi:
+		var nv: float = [2.5, 3.0, 5.0][mini(nobj_done[s].size(), 2)]
+		for i in nobj_hand[s]:
+			if nv > bv and nobj_met(s, i, bt):
+				await _complete_nobj(s, i, bt)
+				return
 	if best >= 0:
 		obj_hand[s].erase(best)
 		obj_done[s].append(best)
@@ -2030,7 +2233,7 @@ func _try_objectives(s: int, bt := {}) -> void:
 
 func _check_objectives_all() -> void:
 	for s in n:
-		_try_objectives(s)
+		await _try_objectives(s)
 
 
 func objective_met(s: int, o: int, bt := {}) -> bool:
@@ -2143,7 +2346,7 @@ func _end_turn_holds(s: int) -> void:
 		hf["central_one_unit_done"] = true
 	hf["two_big_armies"] = c_big
 	hf["central_one_unit"] = c_one
-	_try_objectives(s)
+	await _try_objectives(s)
 
 
 # ================================================================ fine del round e della partita
@@ -2151,6 +2354,10 @@ func _end_turn_holds(s: int) -> void:
 func _end_round() -> void:
 	phase = "round_end"
 	log_msg("— Fine del Round %d —" % round_no)
+	if exp_mon:
+		for s in n:
+			if not mon_standing(s, "sofia").is_empty():
+				_add_vp(s, 1, "Cattedrale di Santa Sofia")
 	for s in n:
 		var k := controlled(s).size()
 		if solo and s == automa:
@@ -2338,7 +2545,7 @@ func _automa_turn(s: int) -> void:
 	while not battles.is_empty() and not game_over:
 		var b: Dictionary = battles.pop_front()
 		await _resolve_battle(b)
-		_check_objectives_all()
+		await _check_objectives_all()
 	if game_over:
 		return
 	phase = "draw"
@@ -2364,7 +2571,7 @@ func _automa_turn(s: int) -> void:
 		oarea.remove_at(idx)
 		odiscard.append(oc)
 		log_msg("L'Automa scarta la Carta Ordini in posizione %s: %s." % [["I", "II", "III", "IV"][clampi(int(card["d"]) - 1, 0, 3)], order_label(oc)])
-	_check_objectives_all()
+	await _check_objectives_all()
 	phase = "play"
 	changed.emit()
 
@@ -2481,7 +2688,7 @@ func _automa_action(s: int, act: Array) -> void:
 			for t in D.UNITS:
 				if reg[src]["n"][t] > 0:
 					cnt[t] = reg[src]["n"][t]
-			_move_units(s, src, dst, cnt)
+			await _move_units(s, src, dst, cnt)
 
 
 func _dist_from(start: int) -> Dictionary:
@@ -2545,3 +2752,600 @@ func _automa_dest(s: int, src: int, to_capital: bool) -> int:
 			return _front_pick(group, s)
 	return -1
 
+
+
+# ================================================================ espansioni Kickstarter
+
+## Indice di un'unità dell'attaccante del tipo t (l'Artiglieria di Fuoco per ultima).
+func _att_unit_index(t: String) -> int:
+	var found := -1
+	var ua: Array = battle["u_att"]
+	for i in ua.size():
+		if ua[i]["t"] == t:
+			if not ua[i].get("fire", false):
+				return i
+			found = i
+	return found
+
+
+func move_adj(r: int) -> Array:
+	if not exp_mon:
+		return adj(r)
+	return adj(r).filter(func(x): return not border_blocked(r, x))
+
+
+# ---------------------------------------------------------------- Pioggia di Fuoco
+
+func fire_in_battle(s: int) -> bool:
+	if not exp_fire or battle.is_empty():
+		return false
+	if s == battle["att"]:
+		for u in battle["u_att"]:
+			if u.get("fire", false):
+				return true
+		return false
+	return reg[battle["r"]]["fire"] == s
+
+
+## Dopo uno schieramento che crea in una Regione la coppia Artiglieria + Fanteria si può sostituirla con
+## l'Artiglieria di Fuoco (le due unità tornano nella riserva).
+func _maybe_fire(s: int, r: int, u: String) -> void:
+	if not exp_fire or not fire_free[s] or not (u in ["A", "F"]):
+		return
+	var g: Dictionary = reg[r]
+	if g["own"] != s or g["fire"] >= 0 or g["n"][u] != 1 or g["n"]["A"] < 1 or g["n"]["F"] < 1:
+		return
+	if not await yesno(s, "fire", "Pioggia di Fuoco: sostituire 1 Artiglieria e 1 Fanteria in %s con l'Artiglieria di Fuoco?" % rname(r), {"region": r}):
+		return
+	g["n"]["F"] -= 1
+	reserve[s]["F"] += 1
+	reserve[s]["A"] += 1          # l'Artiglieria normale torna nella riserva, al suo posto quella di Fuoco
+	g["fire"] = s
+	fire_free[s] = false
+	log_msg("%s schiera l'Artiglieria di Fuoco in %s." % [pname(s), rname(r)])
+	_fx("deploy", {"seat": s, "t": "A", "r": r})
+	changed.emit()
+
+
+# ---------------------------------------------------------------- Emissari del Re
+
+func emi_in_battle(s: int) -> bool:
+	if not exp_emi or battle.is_empty() or emi[s].is_empty():
+		return false
+	if s == battle["att"]:
+		return emi[s]["r"] == -2 and emi[s].get("b", -1) == battle["r"]
+	return emi[s]["r"] == battle["r"]
+
+
+func _emissary_effect(s: int) -> void:
+	var k: String = emi[s]["k"]
+	log_msg("L'Emissario del Re aiuta %s: %s." % [pname(s), D.EMISSARIES[k]])
+	_fx("emissary", {"seat": s})
+	match k:
+		"F2":
+			_roll_die(s, "F")
+			_roll_die(s, "F")
+		"K1":
+			_roll_die(s, "K")
+		"draw":
+			draw_support(s, 1, true)
+		"max":
+			if not battle["dice"][s].is_empty():
+				await _max_die(s)
+	changed.emit()
+
+
+func _lose_emissary(s: int) -> void:
+	if emi[s].is_empty():
+		return
+	log_msg("L'Emissario del Re di %s è perduto e torna disponibile." % pname(s))
+	emi_pool.append(emi[s]["k"])
+	emi[s] = {}
+
+
+## Un Emissario resta sempre con le Unità del suo giocatore: se la sua regione si svuota (casi rari) è perduto.
+func _fix_emissaries() -> void:
+	if not exp_emi:
+		return
+	for s in n:
+		var e: Dictionary = emi[s]
+		if e.is_empty():
+			continue
+		var r: int = e["r"]
+		if r == -2:
+			if _battle_at(int(e.get("b", -1)), s).is_empty() and (battle.is_empty() or battle["att"] != s):
+				_lose_emissary(s)
+		elif reg[r]["own"] != s or units_total(r) == 0:
+			_lose_emissary(s)
+
+
+func nobj_met(s: int, i: int, bt := {}) -> bool:
+	var kind: String = D.NATION_OBJECTIVES[nat(s)][i]["kind"]
+	match kind:
+		"start_neigh_all":
+			var need := []
+			for r in start_regions[s]:
+				for a in adj(r):
+					if not (a in start_regions[s]) and not (a in need):
+						need.append(a)
+			if need.is_empty():
+				return false
+			for a in need:
+				if owner(a) != s:
+					return false
+			return true
+		"all_F":
+			return reserve[s]["F"] == 0
+		"all_K":
+			return reserve[s]["K"] == 0
+		"tokens_plus2":
+			var tk := 0
+			var un := 0
+			for r in controlled(s):
+				if reg[r]["own"] == s and units_total(r) > 0:
+					un += 1
+				else:
+					tk += 1
+			return tk >= un + 2
+		"near_titan3":
+			var k := 0
+			for r in controlled(s):
+				for a in adj(r):
+					var o: int = reg[a]["own"]
+					if o >= 0 and o != s and reg[a]["n"]["T"] > 0:
+						k += 1
+						break
+			return k >= 3
+	if bt.is_empty() or not bt.has("info"):
+		return false
+	var info: Dictionary = bt["info"]
+	match kind:
+		"dice8":
+			return (bt["dice"][s] as Array).size() >= 8
+		"nc5":
+			return (bt["nc_used"][s] as Array).size() >= 5
+	if info["winner"] != s:
+		return false
+	var post: Dictionary = bt["post"][s]
+	var tot := 0
+	for t in D.UNITS:
+		tot += int(post[t])
+	match kind:
+		"win_only_K":
+			return tot > 0 and post["K"] == tot
+		"win_only_F":
+			return tot > 0 and post["F"] == tot
+		"win_only_A":
+			return tot > 0 and post["A"] == tot
+		"win_no_cards":
+			return not bt["sup_any"][s] and (bt["nc_used"][s] as Array).is_empty()
+		"win_central":
+			return info["r"] == central
+		"win_empty_hand":
+			return hand[s].is_empty()
+		"wipe":
+			return bt.get("wiped", false)
+		"win_capital":
+			return bt.get("cap_region", false)
+	return false
+
+
+func _complete_nobj(s: int, i: int, bt: Dictionary) -> void:
+	nobj_hand[s].erase(i)
+	nobj_done[s].append(i)
+	obj_turn[s] = turn_no
+	log_msg("%s completa un Obiettivo Nazione: «%s»" % [pname(s), D.NATION_OBJECTIVES[nat(s)][i]["text"]])
+	_fx("objective", {"seat": s, "nobj": i})
+	var k: int = nobj_done[s].size()
+	if k >= 2:
+		_add_vp(s, D.NOBJ_VP[k - 1], "Obiettivo Nazione")
+		return
+	if emi_pool.is_empty():
+		log_msg("Non ci sono più Emissari del Re disponibili.")
+		return
+	var rs := []
+	if not bt.is_empty() and bt.get("winner", -1) == s and reg[bt["r"]]["own"] == s and units_total(bt["r"]) > 0:
+		rs = [bt["r"]]
+	else:
+		for r in regions:
+			if reg[r]["own"] == s and units_total(r) > 0:
+				rs.append(r)
+	if rs.is_empty():
+		log_msg("%s non ha Armate a cui affidare un Emissario del Re." % pname(s))
+		return
+	var opts := []
+	for kk in emi_pool:
+		opts.append({"label": D.EMISSARIES[kk], "emi": kk})
+	var j := await pick(s, "emi_token", "Obiettivo Nazione: scegli un Emissario del Re", opts)
+	var key: String = opts[j]["emi"]
+	var r: int = rs[0]
+	if rs.size() > 1:
+		r = await pick_region(s, "emi_region", "A quale Armata affidi l'Emissario (%s)?" % D.EMISSARIES[key], rs, false)
+	emi_pool.erase(key)
+	emi[s] = {"k": key, "r": r, "on": true}
+	log_msg("%s affida l'Emissario del Re «%s» all'Armata in %s." % [pname(s), D.EMISSARIES[key], rname(r)])
+	_fx("emissary", {"seat": s})
+	changed.emit()
+
+
+# ---------------------------------------------------------------- Monumenti
+
+func mon_standing(s: int, key: String) -> Dictionary:
+	if not exp_mon or s < 0:
+		return {}
+	for i in 3:
+		var m: Dictionary = mon[s][i]
+		if m["built"] and not m["gone"] and D.monument(nat(s), i)["key"] == key:
+			return m
+	return {}
+
+
+func border_blocked(a: int, b: int) -> bool:
+	if not exp_mon:
+		return false
+	for s in n:
+		var m := mon_standing(s, "sofia")
+		if not m.is_empty() and ((m["r"] == a and m["r2"] == b) or (m["r"] == b and m["r2"] == a)):
+			return true
+	return false
+
+
+func mon_ok_region(s: int, i: int, r: int) -> bool:
+	if inactive.has(r) or not (reg[r]["mon"] as Array).is_empty():
+		return false
+	if reg[r]["cap"] >= 0 or reg[r]["fort"]:
+		return false
+	if D.monument(nat(s), i).get("no_start", false) and r in start_regions[s]:
+		return false
+	return true
+
+
+func mon_regions(s: int, i: int) -> Array:
+	var out := []
+	var border: bool = D.monument(nat(s), i).get("border", false)
+	for r in controlled(s):
+		if not mon_ok_region(s, i, r):
+			continue
+		if border:
+			var ok := false
+			for a in adj(r):
+				if mon_ok_region(s, i, a):
+					ok = true
+			if not ok:
+				continue
+		out.append(r)
+	return out
+
+
+func mon_cost(s: int, i: int) -> int:
+	return maxi(0, int(D.monument(nat(s), i)["cost"]) - discount(round_no))
+
+
+func mon_buildable(s: int, after_d: bool) -> Array:
+	var out := []
+	if not exp_mon or mon_built_turn.get(s, -1) == turn_no:
+		return out
+	for i in 3:
+		if mon[s][i]["built"]:
+			continue
+		if D.monument(nat(s), i).get("after_d", false) and not after_d:
+			continue
+		if hand[s].size() < mon_cost(s, i) or mon_regions(s, i).is_empty():
+			continue
+		out.append(i)
+	return out
+
+
+func mon_turn_options(s: int, after_d: bool) -> Array:
+	var out := []
+	if not exp_mon:
+		return out
+	for key in ["town_pol", "town_sve"]:
+		var m := mon_standing(s, key)
+		if m.is_empty() or mon_used.get("%d_%s" % [s, key], -1) == turn_no or hand[s].is_empty():
+			continue
+		var r: int = m["r"]
+		if reserve[s]["F"] > 0:
+			out.append({"label": "Municipio: scarta 1 Carta Supporto e schiera 1 Fanteria in %s" % rname(r), "action": "_mon_F", "key": key, "ok": true})
+		if key == "town_pol" and reg[r]["own"] == s and reg[r]["n"]["F"] > 0 and reserve[s]["K"] > 0:
+			out.append({"label": "Municipio: scarta 1 Carta Supporto e scambia 1 Fanteria con 1 Cavalleria in %s" % rname(r), "action": "_mon_FK", "key": key, "ok": true})
+	if not mon_buildable(s, after_d).is_empty() and (after_d or mon_declined.get(s, -1) != turn_no):
+		out.append({"label": "Costruisci un Monumento", "action": "_mon_build", "ok": true})
+	return out
+
+
+func _mon_turn_action(s: int, op: Dictionary) -> void:
+	match op["action"]:
+		"_mon_build":
+			var ok := await _mon_build(s, phase == "reset")
+			if not ok:
+				mon_declined[s] = turn_no
+		"_mon_F", "_mon_FK":
+			var key: String = op["key"]
+			var m := mon_standing(s, key)
+			if m.is_empty():
+				return
+			mon_used["%d_%s" % [s, key]] = turn_no
+			var dc := await pick_cards(s, "discard", "Municipio: scarta 1 Carta Supporto", hand[s].duplicate(), 1, 1)
+			for c in dc:
+				discard_support(s, c)
+			var r: int = m["r"]
+			if op["action"] == "_mon_F":
+				reserve[s]["F"] -= 1
+				_put(r, s, "F")
+				log_msg("Municipio: %s schiera 1 Fanteria in %s." % [pname(s), rname(r)])
+				_fx("deploy", {"seat": s, "t": "F", "r": r})
+				await _maybe_fire(s, r, "F")
+			else:
+				_take(r, "F")
+				reserve[s]["F"] += 1
+				reserve[s]["K"] -= 1
+				_put(r, s, "K")
+				log_msg("Municipio: %s scambia 1 Fanteria con 1 Cavalleria in %s." % [pname(s), rname(r)])
+				_fx("deploy", {"seat": s, "t": "K", "r": r})
+	changed.emit()
+
+
+func _mon_build(s: int, after_d: bool) -> bool:
+	var cands := mon_buildable(s, after_d)
+	if cands.is_empty():
+		return false
+	var opts := []
+	for i in cands:
+		var md := D.monument(nat(s), i)
+		opts.append({"label": "%s (costo %d): %s" % [md["name"], mon_cost(s, i), md["text"]], "mon": i, "nation": nat(s)})
+	opts.append({"label": "Non costruire", "mon": -1})
+	var k := await pick(s, "mon_build", "Costruire un Monumento?", opts)
+	var i: int = opts[k]["mon"]
+	if i < 0:
+		return false
+	var md := D.monument(nat(s), i)
+	var r := await pick_region(s, "mon_region", "%s: in quale tua Regione?" % md["name"], mon_regions(s, i), true, {"mon": i})
+	if r < 0:
+		return false
+	var r2 := -1
+	if md.get("border", false):
+		var al := adj(r).filter(func(x): return mon_ok_region(s, i, x))
+		r2 = await pick_region(s, "mon_region2", "%s: sul confine con quale Regione?" % md["name"], al, true, {"from": r, "mon": i})
+		if r2 < 0:
+			return false
+	var cost := mon_cost(s, i)
+	if cost > 0:
+		var pay := await pick_cards(s, "pay", "Scegli %d Carte Supporto da scartare" % cost, hand[s].duplicate(), cost, cost)
+		for c in pay:
+			discard_support(s, c)
+	var m: Dictionary = mon[s][i]
+	m["built"] = true
+	m["r"] = r
+	m["r2"] = r2
+	reg[r]["mon"] = [s, i]
+	if r2 >= 0:
+		reg[r2]["mon"] = [s, i]
+	mon_built_turn[s] = turn_no
+	if r2 >= 0:
+		log_msg("%s costruisce il Monumento %s sul confine fra %s e %s." % [pname(s), md["name"], rname(r), rname(r2)])
+	else:
+		log_msg("%s costruisce il Monumento %s in %s." % [pname(s), md["name"], rname(r)])
+	_fx("monument", {"r": r})
+	changed.emit()
+	return true
+
+
+## Un Monumento si perde (per sempre) quando il proprietario perde il controllo della sua Regione.
+func _check_monuments() -> void:
+	if not exp_mon:
+		return
+	for s in n:
+		for i in 3:
+			var m: Dictionary = mon[s][i]
+			if m["built"] and not m["gone"] and owner(m["r"]) != s:
+				m["gone"] = true
+				reg[m["r"]]["mon"] = []
+				if m["r2"] >= 0:
+					reg[m["r2"]]["mon"] = []
+				for c in m["under"]:
+					sdiscard.append(c)
+				m["under"] = []
+				log_msg("%s perde il controllo di %s: il Monumento %s è distrutto." % [pname(s), rname(m["r"]), D.monument(nat(s), i)["name"]])
+
+
+## Si è preso il controllo di una Regione (Cattedrali di Polonia e Svezia).
+func _gained(s: int, r: int) -> void:
+	if not exp_mon or s < 0:
+		return
+	var m := mon_standing(s, "cath_pol")
+	if not m.is_empty() and r in adj(m["r"]):
+		_add_vp(s, 1, "Cattedrale")
+	m = mon_standing(s, "cath_sve")
+	if not m.is_empty() and r in adj(m["r"]):
+		draw_support(s, 2, true)
+		log_msg("Cattedrale: %s pesca 2 Carte Supporto." % pname(s))
+
+
+func _mon_adj_owned(s: int, m: Dictionary) -> int:
+	var k := 0
+	for a in adj(m["r"]):
+		if owner(a) == s:
+			k += 1
+	return k
+
+
+## Monumenti che si applicano da soli una volta per turno (Castello Reale, San Basilio, Giannizzeri).
+func _mon_auto(s: int) -> void:
+	if not exp_mon:
+		return
+	for key in ["castle_pol", "basil", "jan"]:
+		var m := mon_standing(s, key)
+		var uk := "%d_%s" % [s, key]
+		if m.is_empty() or mon_used.get(uk, -1) == turn_no:
+			continue
+		var k := _mon_adj_owned(s, m)
+		match key:
+			"castle_pol":
+				if k <= 2:
+					mon_used[uk] = turn_no
+					draw_support(s, 1, true)
+					log_msg("Castello Reale: %s pesca 1 Carta Supporto." % pname(s))
+			"basil":
+				if k >= 4:
+					mon_used[uk] = turn_no
+					draw_support(s, 1, true)
+					log_msg("Cattedrale di San Basilio: %s pesca 1 Carta Supporto." % pname(s))
+			"jan":
+				if k >= 5:
+					mon_used[uk] = turn_no
+					_add_vp(s, 1, "Tenda dei Giannizzeri")
+	changed.emit()
+
+
+## Movimento facoltativo di 1 Unità dalla Regione del Monumento o da una adiacente (Topkapi, Tre Kronor).
+func _mon_move(s: int, m: Dictionary, unit: String, title: String, allow_battle: bool) -> void:
+	var srcs := []
+	for r in [m["r"]] + adj(m["r"]):
+		if reg[r]["own"] != s or (reg[r]["n"][unit] <= 0 if unit != "X" else units_total(r) <= 0):
+			continue
+		var d := move_targets(s, r)
+		if not allow_battle:
+			d = d.filter(func(x): return not _enemy_units(s, x))
+		if not d.is_empty():
+			srcs.append(r)
+	if srcs.is_empty():
+		return
+	var src := await pick_region(s, "mon_move_from", "%s: da quale Regione? (puoi rinunciare)" % title, srcs, true, {"unit": unit})
+	if src < 0:
+		return
+	var ut := unit
+	if unit == "X":
+		var types := unit_types_in(src)
+		ut = types[0]
+		if types.size() > 1:
+			var o := []
+			for u in types:
+				o.append({"label": D.UNIT_NAME[u], "unit": u})
+			ut = o[await pick(s, "move_type", "Quale Unità muovi?", o)]["unit"]
+	var dests := move_targets(s, src)
+	if not allow_battle:
+		dests = dests.filter(func(x): return not _enemy_units(s, x))
+	var dst := await pick_region(s, "mon_move_to", "%s: verso quale Regione?" % title, dests, true, {"from": src, "unit": ut})
+	if dst < 0:
+		return
+	await _move_units(s, src, dst, {ut: 1})
+
+
+func _mon_after_a(s: int) -> void:
+	var m := mon_standing(s, "topkapi")
+	if not m.is_empty():
+		await _mon_move(s, m, "K", "Palazzo di Topkapi: muovi 1 Cavalleria", true)
+
+
+func _mon_after_c(s: int) -> void:
+	if not exp_mon:
+		return
+	var m := mon_standing(s, "schon")
+	if not m.is_empty():
+		var k := 0
+		for a in adj(m["r"]):
+			var o := owner(a)
+			if o >= 0 and o != s:
+				k += 1
+		if k >= 2:
+			_add_vp(s, 1, "Castello di Schönbrunn")
+	m = mon_standing(s, "mosque")
+	if not m.is_empty():
+		var opts := [{"label": "Metti la prima Carta Supporto del mazzo sotto la Moschea (ora %d)" % (m["under"] as Array).size(), "k": "put"}]
+		if not (m["under"] as Array).is_empty():
+			opts.append({"label": "Prendi le %d Carte Supporto sotto la Moschea" % (m["under"] as Array).size(), "k": "take"})
+		var j := 0
+		if opts.size() > 1:
+			j = await pick(s, "mosque", "Moschea Blu", opts, {"under": (m["under"] as Array).size()})
+		if opts[j]["k"] == "put":
+			var c := _deck_top()
+			if c >= 0:
+				m["under"].append(c)
+				log_msg("Moschea Blu: %s mette una Carta Supporto sotto il Monumento (%d)." % [pname(s), (m["under"] as Array).size()])
+		else:
+			hand[s].append_array(m["under"])
+			log_msg("Moschea Blu: %s prende %d Carte Supporto." % [pname(s), (m["under"] as Array).size()])
+			m["under"] = []
+		changed.emit()
+
+
+func _mon_after_d(s: int) -> void:
+	if not exp_mon:
+		return
+	var m := mon_standing(s, "kronor")
+	if not m.is_empty():
+		await _mon_move(s, m, "X", "Castello di Tre Kronor: muovi 1 Unità", false)
+	while true:
+		var opts := mon_turn_options(s, true)
+		if opts.is_empty():
+			return
+		opts.append({"label": "Prosegui", "action": ""})
+		var k := await pick(s, "mon_menu", "Monumenti: dopo la Fase D", opts)
+		if opts[k]["action"] == "":
+			return
+		var before: int = mon_built_turn.get(s, -1)
+		await _mon_turn_action(s, opts[k])
+		if opts[k]["action"] == "_mon_build" and mon_built_turn.get(s, -1) == before:
+			return
+
+
+func _deck_top() -> int:
+	if sdeck.is_empty():
+		if sdiscard.is_empty():
+			return -1
+		sdeck = sdiscard
+		sdiscard = []
+		_shuffle(sdeck)
+	return sdeck.pop_front()
+
+
+## Torre di Spasskaja: le Unità che partono dal Monumento possono proseguire di 1 Regione.
+func _move_with_spass(s: int, src: int, dst: int, cnt: Dictionary, no_battle: bool) -> void:
+	var m := mon_standing(s, "spass")
+	if not m.is_empty() and m["r"] == src and not _enemy_units(s, dst) and owner(dst) in [-1, s] and _battle_at(dst, s).is_empty():
+		var d2s := move_targets(s, dst).filter(func(x): return x != src)
+		if no_battle:
+			d2s = d2s.filter(func(x): return not _enemy_units(s, x))
+		if not d2s.is_empty() and await yesno(s, "spass", "Torre di Spasskaja: le Unità proseguono di 1 Regione oltre %s?" % rname(dst), {"from": dst}):
+			var d2 := await pick_region(s, "spass_to", "Torre di Spasskaja: verso quale Regione proseguono?", d2s, true, {"from": dst})
+			if d2 >= 0:
+				await _move_units(s, src, dst, cnt)
+				await _move_units(s, dst, d2, cnt)
+				return
+	await _move_units(s, src, dst, cnt)
+
+
+## Municipio del Sacro Romano Impero: Carte Nazione in cima al mazzo giocabili gratis in questa Battaglia.
+func _mon_nc_cards(s: int) -> Array:
+	var out := []
+	if not exp_mon or battle.is_empty() or battle["mon_nc"].has(s):
+		return out
+	var m := mon_standing(s, "town_sri")
+	if m.is_empty():
+		return out
+	var r: int = battle["r"]
+	if r != m["r"] and not (r in adj(m["r"])):
+		return out
+	for ci in ndeck[s].slice(0, 3):
+		var c := D.nation_card(nat(s), ci)
+		if c["when"] in ["battaglia", "prima"] and req_ok(s, c["req"]) and _effect_possible(s, c["eff"]):
+			out.append(ci)
+	return out
+
+
+func _mon_town_sri(s: int) -> void:
+	var cands := _mon_nc_cards(s)
+	if cands.is_empty():
+		return
+	var opts := []
+	for ci in cands:
+		opts.append({"label": D.nation_card_text(nat(s), ci), "card": ci, "nation_card": ci})
+	var j := await pick(s, "mon_nc_pick", "Municipio: quale Carta Nazione giochi gratis?", opts, {"battle": true})
+	var ci: int = opts[j]["card"]
+	battle["mon_nc"][s] = true
+	battle["nc_used"][s].append(-100 - ci)
+	ndeck[s].erase(ci)
+	ndeck[s].append(ci)
+	log_msg("Municipio: %s gioca gratis la Carta Nazione %s." % [pname(s), D.nation_card_text(nat(s), ci)])
+	await _effect(s, D.nation_card(nat(s), ci)["eff"])

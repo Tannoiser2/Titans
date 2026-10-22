@@ -298,8 +298,67 @@ func _player_panel(s: int) -> Control:
 					_zoom_card(UI.nation_card_tex(nat, ci), D.nation_card_text(nat, ci)))
 			cards.add_child(tr)
 		vb.add_child(cards)
+	var xr := _expansion_row(s)
+	if xr != null:
+		vb.add_child(xr)
 	pc.tooltip_text = "Abilità della Nazione: %s\nAbilità del Titano: %s" % [D.NATIONS[nat]["nation_ab"], D.NATIONS[nat]["titan_ab"]]
 	return pc
+
+
+## Monumenti, Emissario del Re e Artiglieria di Fuoco di un giocatore.
+func _expansion_row(s: int) -> Control:
+	if not (engine.exp_mon or engine.exp_emi or engine.exp_fire):
+		return null
+	var nat := engine.nat(s)
+	var hb := HBoxContainer.new()
+	hb.add_theme_constant_override("separation", 4)
+	if engine.exp_mon:
+		for i in 3:
+			var m: Dictionary = engine.mon[s][i]
+			var md := D.monument(nat, i)
+			var t := UI.tex("res://assets/carte/mon_%s%d.jpg" % [nat, i])
+			var tr := UI.icon_rect(t, Vector2(58, 36))
+			tr.mouse_filter = Control.MOUSE_FILTER_STOP
+			var st := "da costruire (costo %d)" % engine.mon_cost(s, i)
+			if m["gone"]:
+				st = "distrutto"
+				tr.modulate = Color(0.55, 0.25, 0.25)
+			elif m["built"]:
+				st = "in " + engine.rname(m["r"]) + ((" / " + engine.rname(m["r2"])) if m["r2"] >= 0 else "")
+				if (m["under"] as Array).size() > 0:
+					st += " · %d carte sotto" % (m["under"] as Array).size()
+			else:
+				tr.modulate = Color(0.6, 0.6, 0.6, 0.75)
+			var txt := "%s (%s) — %s\n%s" % [md["name"], ["I", "II", "III"][i], st, md["text"]]
+			tr.tooltip_text = txt
+			tr.gui_input.connect(func(ev):
+				if ev is InputEventMouseButton and ev.pressed and ev.button_index == MOUSE_BUTTON_LEFT:
+					_zoom_card(t, txt))
+			hb.add_child(tr)
+	if engine.exp_emi:
+		var e: Dictionary = engine.emi[s]
+		if not e.is_empty():
+			var ic := UI.icon_rect(UI.tex("res://assets/segni/emi_%s.png" % e["k"]), Vector2(34, 34))
+			ic.mouse_filter = Control.MOUSE_FILTER_STOP
+			if not e["on"]:
+				ic.modulate = Color(0.55, 0.55, 0.55)
+			var where: String = engine.rname(e["r"]) if e["r"] >= 0 else "in Battaglia (%s)" % engine.rname(int(e.get("b", -1)))
+			ic.tooltip_text = "Emissario del Re: %s\n%s · con l'Armata in %s" % [D.EMISSARIES[e["k"]], "attivo" if e["on"] else "girato: tornerà attivo nella prossima Battaglia", where]
+			hb.add_child(ic)
+	var col := VBoxContainer.new()
+	col.add_theme_constant_override("separation", 0)
+	hb.add_child(col)
+	if engine.exp_emi:
+		var nl := UI.label("Ob. Nazione %d/3" % engine.nobj_done[s].size(), 14, UI.MUTED)
+		nl.tooltip_text = "Obiettivi Nazione completati (1° = Emissario, 2° = 3 PV, 3° = 5 PV)"
+		nl.mouse_filter = Control.MOUSE_FILTER_PASS
+		col.add_child(nl)
+	if engine.exp_fire:
+		var fl2 := UI.label("Fuoco %s" % ("in campo" if not engine.fire_free[s] else "in riserva"), 14, Color("#ffb070") if not engine.fire_free[s] else UI.MUTED)
+		fl2.tooltip_text = "Artiglieria di Fuoco (Pioggia di Fuoco): conta come 1 Artiglieria e tira anche 1 Dado Fanteria"
+		fl2.mouse_filter = Control.MOUSE_FILTER_PASS
+		col.add_child(fl2)
+	return hb
 
 
 func _refresh_left() -> void:
@@ -462,6 +521,26 @@ func _refresh_hand() -> void:
 		hand_box.add_child(_objective_tile(o, false))
 	for o in engine.obj_done[s]:
 		hand_box.add_child(_objective_tile(o, true))
+	if engine.exp_emi:
+		var nv := VBoxContainer.new()
+		nv.add_child(UI.label("Obiettivi\nNazione", 14, UI.MUTED))
+		var nh := HBoxContainer.new()
+		nh.add_theme_constant_override("separation", 3)
+		for i in 3:
+			var t := UI.tex("res://assets/carte/nobj_%s%d.jpg" % [nat, i])
+			var tr := UI.icon_rect(t, Vector2(56, 82))
+			tr.mouse_filter = Control.MOUSE_FILTER_STOP
+			var done: bool = i in engine.nobj_done[s]
+			if done:
+				tr.modulate = Color(0.6, 0.85, 0.6)
+			var txt: String = D.NATION_OBJECTIVES[nat][i]["text"] + ("\n(completato)" if done else "")
+			tr.tooltip_text = txt
+			tr.gui_input.connect(func(ev):
+				if ev is InputEventMouseButton and ev.pressed and ev.button_index == MOUSE_BUTTON_LEFT:
+					_zoom_card(t, txt))
+			nh.add_child(tr)
+		nv.add_child(nh)
+		hand_box.add_child(nv)
 	if engine.ndeck[s].size() > 0:
 		hand_box.add_child(VSeparator.new())
 		var top3 := VBoxContainer.new()
@@ -698,6 +777,27 @@ func _show_pick(req: Dictionary) -> void:
 			hb0.add_child(vb)
 			flow.add_child(hb0)
 			continue
+		if o.has("mon") and int(o["mon"]) >= 0:
+			var hbm := HBoxContainer.new()
+			var mt := UI.icon_rect(UI.tex("res://assets/carte/mon_%s%d.jpg" % [o["nation"], o["mon"]]), Vector2(150, 92))
+			hbm.add_child(mt)
+			var vbm := VBoxContainer.new()
+			var md := D.monument(o["nation"], o["mon"])
+			vbm.add_child(UI.wrap(UI.label("%s — costo %d\n%s" % [md["name"], engine.mon_cost(req["seat"], o["mon"]), md["text"]], 14), 300))
+			var bm := UI.button("Costruisci", 160, 36, 16)
+			bm.pressed.connect(func(): _provide(idx))
+			vbm.add_child(bm)
+			hbm.add_child(vbm)
+			flow.add_child(hbm)
+			continue
+		if o.has("emi"):
+			var be := UI.button(o["label"], 0, 56, 17)
+			be.icon = UI.tex("res://assets/segni/emi_%s.png" % o["emi"])
+			be.expand_icon = true
+			be.add_theme_constant_override("icon_max_width", 44)
+			be.pressed.connect(func(): _provide(idx))
+			flow.add_child(be)
+			continue
 		if o.has("nation_card"):
 			var hb := HBoxContainer.new()
 			var tr2 := UI.icon_rect(UI.nation_card_tex(engine.nat(req["seat"]), o["nation_card"]), Vector2(36, 55))
@@ -839,6 +939,15 @@ func _on_region_hover(r: int) -> void:
 			lines.append("Capitale di %s%s" % [engine.pname(g["cap"]), "" if engine.capital_alive[g["cap"]] else " (distrutta)"])
 		if g["fort"]:
 			lines.append("Fortezza")
+		if g.get("fire", -1) >= 0:
+			lines.append("(una è l'Artiglieria di Fuoco: tira anche 1 Dado Fanteria)")
+		var gm: Array = g.get("mon", [])
+		if not gm.is_empty():
+			var md := D.monument(engine.nat(gm[0]), gm[1])
+			lines.append("Monumento di %s: %s" % [engine.pname(gm[0]), md["name"]])
+		for p in engine.n:
+			if engine.exp_emi and not engine.emi[p].is_empty() and engine.emi[p]["r"] == r:
+				lines.append("Emissario del Re: %s%s" % [D.EMISSARIES[engine.emi[p]["k"]], "" if engine.emi[p]["on"] else " (girato)"])
 		if r == engine.central:
 			lines.append("Regione Centrale")
 	tip_lbl.text = "\n".join(lines)
@@ -930,8 +1039,11 @@ func _zoom_card(t: Texture2D, text: String) -> void:
 	hb.position = Vector2(560, 220)
 	hb.add_theme_constant_override("separation", 24)
 	zoom.add_child(hb)
-	hb.add_child(UI.icon_rect(t, Vector2(400, 614)))
-	var l := UI.wrap(UI.label(text, 24), 420)
+	var wide: bool = t != null and t.get_width() > t.get_height()
+	if wide:
+		hb.position = Vector2(300, 300)
+	hb.add_child(UI.icon_rect(t, Vector2(660, 410) if wide else Vector2(400, 614)))
+	var l := UI.wrap(UI.label(text, 24), 520 if wide else 420)
 	hb.add_child(l)
 
 

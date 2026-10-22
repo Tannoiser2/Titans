@@ -54,9 +54,9 @@ func _ready() -> void:
 	right.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	right.size_flags_vertical = Control.SIZE_EXPAND_FILL
 	cols.add_child(right)
-	var pages := [["Regole", _rules_a(), _rules_b()], ["Nazioni", _nations_a(), _nations_b()], ["5ª Nazione", _nation("sri"), _fifth()], ["Avanzata e varianti", _adv(), _digital()], ["Solitario", _solo_a(), _solo_b()]]
+	var pages := [["Regole", _rules_a(), _rules_b()], ["Nazioni", _nations_a(), _nations_b()], ["5ª Nazione", _nation("sri"), _fifth()], ["Avanzata e varianti", _adv(), _digital()], ["Solitario", _solo_a(), _solo_b()], ["Espansioni", _xp_a(), _xp_b()]]
 	for i in pages.size():
-		var b := UI.button(pages[i][0], 200, 44, 19)
+		var b := UI.button(pages[i][0], 170, 44, 18)
 		var k := i
 		b.pressed.connect(func():
 			left.text = pages[k][1]
@@ -180,6 +180,35 @@ func _solo_b() -> String:
 	return s
 
 
+func _xp_a() -> String:
+	var s := _h("Monumenti")
+	s += "Ogni Nazione ha 3 Monumenti. Nel tuo turno (nel menu delle azioni della Fase A o dopo la Fase D) puoi costruirne 1, pagando il costo in Carte Supporto (sconto del 3° Round come le Carte Nazione), in una Regione che controlli senza Capitale, Fortezza o altri Monumenti. Dove c'è un Monumento non si costruisce una Fortezza. Se perdi il controllo della Regione il Monumento è distrutto per sempre.\n"
+	for nt in D.NATION_ORDER:
+		s += "\n[b]%s[/b]\n" % D.NATIONS[nt]["name"]
+		for i in 3:
+			var md: Dictionary = D.MONUMENTS[nt][i]
+			s += "• [b]%s[/b] (%s): %s\n" % [md["name"], ["I", "II", "III"][i], md["text"]]
+	return s
+
+
+func _xp_b() -> String:
+	var s := _h("Emissari del Re")
+	s += "Prima degli Obiettivi Segreti ognuno riceve i 3 Obiettivi Nazione della sua Nazione; si preparano tanti Emissari quanti sono i giocatori (3 in due). Si completa sempre al massimo 1 Obiettivo per turno, Segreto o Nazione.\n"
+	s += "• Il 1° Obiettivo Nazione dà un Emissario, che scegli fra quelli disponibili e affidi all'Armata che ha completato l'Obiettivo; il 2° vale 3 PV, il 3° 5 PV.\n"
+	s += "• L'Emissario segue l'Armata quando muove (o resta, a tua scelta) e la aiuta in Battaglia: +2 Dadi Fanteria, +1 Dado Cavalleria, 1 Carta Supporto, 1 Dado al massimo oppure +1 PV se vinci.\n"
+	s += "• Dopo una vittoria si gira e nella Battaglia successiva non aiuta, ma torna attivo. Se l'Armata perde si ritira con lei; se l'Armata è eliminata l'Emissario torna disponibile.\n\n"
+	s += _h("Pioggia di Fuoco")
+	s += "Ogni Nazione ha un'Artiglieria di Fuoco nella riserva. Quando uno schieramento di Artiglieria o Fanteria crea in una Regione la coppia Artiglieria + Fanteria, puoi rimettere le due Unità nella riserva e schierare al loro posto l'Artiglieria di Fuoco.\n"
+	s += "• Per movimento, carte e abilità è 1 Unità di Artiglieria; in Battaglia tira 1 Dado Artiglieria e anche 1 Dado Fanteria.\n"
+	s += "• Se eliminata torna nella riserva e si può ricreare.\n\n"
+	s += _h("Interpretazioni della versione digitale")
+	s += "• Il costo dei Monumenti è il numero romano della carta (I, II, III).\n"
+	s += "• Si costruisce al massimo 1 Monumento per turno. Castello Reale, San Basilio e Giannizzeri si attivano da soli, dopo le Battaglie o dopo la Fase D.\n"
+	s += "• Santa Sofia si perde se perdi la Regione su cui l'hai costruita.\n"
+	s += "• Quando muovi un'Artiglieria da una Regione con l'Artiglieria di Fuoco si muove quella di Fuoco; nelle perdite si elimina per ultima.\n"
+	return s
+
+
 func _adv() -> String:
 	var s := _h("Modalità Avanzata")
 	s += "Si usa il Mazzo Ordini Avanzati e il lato della plancia con il tracciato Energia (si parte con 1, massimo 10).\n"
@@ -206,5 +235,5 @@ func _digital() -> String:
 	s += "• Le carte Supporto giocate in coppia o in tris sono scelte automaticamente fra quelle con il requisito soddisfatto.\n"
 	s += "• Il Bogatyr russo può far ritirare un dado qualsiasi della Battaglia, anche dell'avversario.\n"
 	s += "• Lo spazio fisico delle regioni non è limitato.\n"
-	s += "• Non sono incluse (per ora) le espansioni diverse dalla 5ª Nazione.\n"
+	s += "• Non sono incluse (per ora) Campi di Sangue, Echi del Passato, Spirito di Guerra e Potere dei Titani.\n"
 	return s

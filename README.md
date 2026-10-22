@@ -21,6 +21,13 @@ copia fisica e dal modulo Tabletop Simulator.
 - **Modalità Solitario contro l'Automa** (Compendio delle Nazioni): i 6 scenari S1–S6, le 12 carte Automa
   scansionate dalla copia fisica, livello Base o Avanzato (azioni con la stella); l'Automa segue le sue regole di
   scelta (Fronte di Battaglia, Limite d'Armata, priorità di movimento e di ritirata) e il suo copione in Battaglia.
+- **Espansioni Kickstarter** (attivabili nel menu, anche online):
+  - **Monumenti**: 3 Monumenti per Nazione con le loro carte e i segnalini sul tabellone (sul confine per
+    Santa Sofia), costruzione, perdita e tutti i 15 poteri;
+  - **Emissari del Re**: i 15 Obiettivi Nazione (carte dal PDF italiano) e i 5 Emissari che seguono le Armate,
+    aiutano in Battaglia e si girano dopo la vittoria;
+  - **Pioggia di Fuoco**: l'Artiglieria di Fuoco di ogni Nazione (Artiglieria + Fanteria che diventano una sola
+    Unità che tira anche un Dado Fanteria), con la sua miniatura arroventata.
 - **IA** a tre livelli in qualunque combinazione con i giocatori umani; più umani sullo stesso dispositivo con la
   schermata «passa il dispositivo».
 - **Gioco online** su Firebase: ognuno dal suo dispositivo con un codice di 4 lettere.
@@ -56,8 +63,13 @@ dove ritirarsi e schierare.
 - Lo spazio fisico delle regioni non è limitato.
 - Solitario: quando le regole dell'Automa lasciano una scelta libera («scegline una») decide il caso; le Carte
   Supporto dell'Automa sono una pila coperta e paga sempre dal fondo.
-- Non sono ancora incluse le altre espansioni (Monumenti, Campi di Sangue, Echi del Passato, Pioggia di Fuoco,
-  Emissari del Re).
+- Monumenti: il costo è il numero romano della carta (I, II, III); al massimo 1 Monumento per turno, costruito dal
+  menu delle azioni della Fase A o dopo la Fase D; Castello Reale, San Basilio e Giannizzeri si attivano da soli.
+- Pioggia di Fuoco: quando un'Artiglieria lascia una Regione con l'Artiglieria di Fuoco si muove quella di Fuoco;
+  nelle perdite è eliminata per ultima.
+- Emissari del Re: se l'Armata che lo accompagna è eliminata, l'Emissario torna fra quelli disponibili.
+- Non sono ancora incluse Campi di Sangue, Echi del Passato, Spirito di Guerra e Potere dei Titani (manca parte
+  del materiale: dadi speciali e mazzi di carte).
 
 ## Comandi
 Trascina con il tasto sinistro per ruotare la vista, con il destro per spostarla, rotella per lo zoom; «Vista»
@@ -93,6 +105,7 @@ tests/                        simulazioni, screenshot, prova online con finto Fi
 godot --headless --path . -s tests/sim.gd -- 10 3 1          # 10 partite fra IA, 3 giocatori, livello Normale
 godot --headless --path . -s tests/sim.gd -- 10 2 1 1        # …in Modalità Avanzata
 TI_SOLO=1 godot --headless --path . -s tests/sim.gd -- 10 2 1 # IA contro l'Automa Base (TI_SOLO=2 Avanzato)
+TI_XP=mef godot --headless --path . -s tests/sim.gd -- 10 4 1 # con Monumenti, Emissari e Pioggia di Fuoco
 python3 tests/firebase_mock.py 8765 & …tests/online_play.gd  # due dispositivi online sul finto Firebase
 xvfb-run godot --path . -s res://tests/shot.gd -- game       # screenshot
 ```

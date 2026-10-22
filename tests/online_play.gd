@@ -28,6 +28,8 @@ func _run() -> void:
 	menu.scen_id = "3-1A"
 	menu.modes = {"pol": 0, "sve": 0, "ott": 2, "rus": 2}
 	menu.speed = 3
+	if OS.get_environment("TI_XP") != "":
+		menu.xp = {"monuments": true, "emissaries": true, "fire": true}
 	menu._online_panel()
 	menu.on_name.text = "Host" if role == "host" else "Ospite"
 	if role == "host":
