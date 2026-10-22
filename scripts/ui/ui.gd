@@ -171,8 +171,8 @@ static func primary(b: Button) -> Button:
 
 ## Dado disegnato: colore per tipo, pallini pari al valore (0 = faccia vuota).
 static func draw_die(ci: CanvasItem, rect: Rect2, t: String, v: int, selected := false, dim := false, skull := false, zero := false) -> void:
-	var bg: Color = {"F": Color("#e9dcc0"), "K": Color("#c79a5a"), "A": Color("#8f969e"), "T": Color("#7e1f1f"), "C": Color("#5b3a8c"), "Q": Color("#6d7078")}[t]
-	var pip: Color = Color("#f6ecd6") if t in ["T", "C", "Q"] else Color("#1d1712")
+	var bg: Color = {"F": Color("#e9dcc0"), "K": Color("#c79a5a"), "A": Color("#8f969e"), "T": Color("#7e1f1f"), "C": Color("#5b3a8c"), "Q": Color("#6d7078"), "W": Color("#2aa7ad")}[t]
+	var pip: Color = Color("#f6ecd6") if t in ["T", "C", "Q", "W"] else Color("#1d1712")
 	if zero:
 		bg = bg.darkened(0.35)
 	if dim:
@@ -193,6 +193,10 @@ static func draw_die(ci: CanvasItem, rect: Rect2, t: String, v: int, selected :=
 		0: [], 1: [Vector2.ZERO], 2: [Vector2(-o, -o), Vector2(o, o)], 3: [Vector2(-o, -o), Vector2.ZERO, Vector2(o, o)],
 		4: [Vector2(-o, -o), Vector2(o, -o), Vector2(-o, o), Vector2(o, o)],
 	}
+	if t == "W" and skull:
+		# simbolo dello Spirito di Guerra: disco chiaro con una fiamma
+		ci.draw_circle(c + Vector2(s * 0.18, s * 0.18), s * 0.17, Color("#f3efe4"))
+		ci.draw_colored_polygon(PackedVector2Array([c + Vector2(s * 0.18, s * 0.06), c + Vector2(s * 0.26, s * 0.24), c + Vector2(s * 0.10, s * 0.24)]), bg)
 	if t == "C" and skull:
 		# teschio in basso a destra: cranio, occhi e denti
 		var k := c + Vector2(s * 0.26, s * 0.26)
@@ -203,6 +207,9 @@ static func draw_die(ci: CanvasItem, rect: Rect2, t: String, v: int, selected :=
 		ci.draw_circle(k + Vector2(kr * 0.4, -kr * 0.05), kr * 0.28, bg)
 		for p in pos.get(v, []):
 			ci.draw_circle(c + Vector2(-s * 0.14, -s * 0.14) + p * 0.75, r * 0.9, pip)
+	elif v > 4 or (t == "W" and v > 0):
+		init_fonts()
+		ci.draw_string(font_head_b, c + Vector2(-s * 0.32, s * 0.16), str(v), HORIZONTAL_ALIGNMENT_CENTER, s * 0.64, int(s * 0.5), pip)
 	else:
 		for p in pos.get(v, []):
 			ci.draw_circle(c + p, r, pip)

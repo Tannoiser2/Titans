@@ -711,7 +711,7 @@ class DiceRow extends Control:
 			var d: Dictionary = dice[i]
 			var r := Rect2(Vector2(4 + i * step, 6 + (58.0 - sz) * 0.5), Vector2(sz, sz))
 			var sel: bool = [seat, i] in view.sel_dice
-			UI.draw_die(self, r, d["t"], int(d["v"]), sel, false, d.get("sk", false), zero and d["t"] == "C")
+			UI.draw_die(self, r, d["t"], int(d["v"]), sel, false, d.get("sk", false) or d.get("sym", false), zero and d["t"] == "C")
 
 	func _gui_input(ev: InputEvent) -> void:
 		if ev is InputEventMouseButton and ev.pressed and ev.button_index == MOUSE_BUTTON_LEFT:

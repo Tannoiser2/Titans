@@ -126,6 +126,8 @@ var cossack_pool := 0            # Cosacchi nella riserva comune
 var cos_up: Array = []           # per posto: carte Supporto sotto la Plancia (Potenziamenti dei Cosacchi)
 var cos_turn := {}               # posto -> turno in cui ha usato l'Azione speciale dei Cosacchi
 var q_stop := {}                 # regioni dove un Cosacco si è fermato in questo turno
+var exp_ws := false              # Spirito di Guerra (mazzo Supporto alternativo e Dadi Spirito di Guerra)
+var face_n := 4                  # Carte Supporto scoperte (6 se si mescolano due mazzi)
 
 
 # ================================================================ preparazione
@@ -150,6 +152,7 @@ func setup(config: Dictionary) -> void:
 	exp_fire = bool(config.get("fire", false)) and not solo
 	exp_echo = bool(config.get("echoes", false)) and not solo
 	exp_cos = bool(config.get("fields", false)) and not solo
+	exp_ws = bool(config.get("spirit", false)) and not solo
 	for s in config["seats"]:
 		if bool(s.get("automa", false)):
 			automa = players.size()
@@ -244,7 +247,14 @@ func setup(config: Dictionary) -> void:
 					else:
 						reserve[s][ch] -= 1
 	# mazzi
-	sdeck = range(D.SUPPORT_BASE, D.SUPPORT.size()) if exp_cos else range(D.SUPPORT_BASE)
+	sdeck = []
+	if exp_cos:
+		sdeck.append_array(range(D.SUPPORT_BASE, D.SUPPORT_FB))
+	if exp_ws:
+		sdeck.append_array(range(D.SUPPORT_FB, D.SUPPORT.size()))
+	if sdeck.is_empty():
+		sdeck = range(D.SUPPORT_BASE)
+	face_n = 6 if exp_cos and exp_ws else 4
 	_shuffle(sdeck)
 	sdiscard = []
 	sface = []
@@ -585,7 +595,7 @@ func draw_support(s: int, k := 1, quiet := false) -> void:
 
 
 func _refill_face() -> void:
-	while sface.size() < 4:
+	while sface.size() < face_n:
 		if sdeck.is_empty():
 			if sdiscard.is_empty():
 				return
@@ -1593,6 +1603,10 @@ func _reroll(s: int, i: int) -> void:
 	d["v"] = D.DICE[d["t"]][face]
 	if d["t"] == "C":
 		d["sk"] = D.FALLEN_SKULL[face]
+	if d["t"] == "W":
+		d["sym"] = D.WS_SYMBOL[face]
+		if d["sym"]:
+			d["pend"] = true
 
 
 func _apply_nation_ability(s: int) -> void:
@@ -1827,8 +1841,8 @@ func _move_in_sources(s: int, t: String) -> Array:
 	return out
 
 
-func _move_in(s: int, t: String) -> void:
-	var srcs := _move_in_sources(s, t)
+func _move_in(s: int, t: String, override := []) -> void:
+	var srcs := _move_in_sources(s, t) if override.is_empty() else override
 	var src := await pick_region(s, "move_in", "Muovi 1 Unità nella Battaglia: da quale Regione adiacente?", srcs, true, {"unit": t})
 	if src < 0:
 		return
@@ -1942,15 +1956,23 @@ func _before_battle(s: int) -> void:
 func support_plays(s: int) -> Array:
 	var ignore_left: bool = nat(s) == "sve" and has_titan(s) and not battle["titan_ab"].has(s)
 	var out := []
-	for kind in ["forza", "dado", "muovi"]:
+	var decks := []
+	for c in hand[s]:
+		var dk: String = D.SUPPORT[c].get("deck", "base")
+		if not (dk in decks):
+			decks.append(dk)
+	for combo in _deck_kinds(decks):
+		var deck: String = combo[0]
+		var kind: String = combo[1]
 		var ok_cards := []
 		var any_cards := []
 		for c in hand[s]:
-			if D.SUPPORT[c]["kind"] == kind:
+			if D.SUPPORT[c]["kind"] == kind and D.SUPPORT[c].get("deck", "base") == deck:
 				any_cards.append(c)
 				if support_req_ok(s, c):
 					ok_cards.append(c)
 		var maxn: int = {"forza": 3, "dado": 2, "muovi": 1}[kind]
+		var ws: bool = deck == "sg"
 		if kind == "muovi" and (battle["moved_in"].has(s) or _move_in_sources(s, "X").is_empty()):
 			continue
 		for k in range(1, maxn + 1):
@@ -1967,24 +1989,61 @@ func support_plays(s: int) -> Array:
 				uses_ign = true
 			else:
 				continue
-			if kind == "dado":
+			var wsdie: bool = ws and ((kind == "forza" and k >= 2) or (kind == "dado" and k == 2))
+			if wsdie and ws_free() <= 0:
+				continue
+			if kind == "dado" and not wsdie:
 				var dt := "F" if k == 1 else "T"
 				if not can_roll(s, dt):
 					continue
 			var lbl := ""
+			var ev := -1.0
 			match kind:
 				"forza": lbl = "Aggiungi Forza: %d carta%s (+%d)" % [k, "" if k == 1 else "e", [0, 1, 3, 5][k]]
 				"dado": lbl = "Aggiungi un Dado: %s" % ("1 carta (+1 Dado Fanteria)" if k == 1 else "2 carte (+1 Dado Titano)")
 				"muovi": lbl = "Muovi 1 Unità nella Battaglia"
+			if wsdie:
+				if kind == "forza":
+					lbl = "Spirito di Guerra: %d carte Aggiungi Forza (1 Dado Spirito di Guerra, simbolo +%d)" % [k, 3 if k == 2 else 6]
+					ev = 1.5 + (1.5 if k == 2 else 3.0)
+				else:
+					lbl = "Spirito di Guerra: 2 carte Aggiungi un Dado (1 Dado Spirito di Guerra, simbolo = effetto)"
+					ev = 2.1
 			if uses_ign:
 				lbl += " — con l'abilità del Titano"
-			out.append({"kind": kind, "n": k, "cards": cards, "label": lbl, "ign": uses_ign})
+			var play := {"kind": kind, "n": k, "cards": cards, "label": lbl, "ign": uses_ign, "deck": deck, "ws": wsdie}
+			if ev >= 0.0:
+				play["ev"] = ev
+			out.append(play)
 	return out
+
+
+func _deck_kinds(decks: Array) -> Array:
+	var out := []
+	for kind in ["forza", "dado", "muovi"]:
+		for dk in decks:
+			out.append([dk, kind])
+	return out
+
+
+## Dadi Spirito di Guerra ancora nella riserva comune.
+func ws_free() -> int:
+	if not exp_ws or battle.is_empty():
+		return 0
+	var k := 0
+	for p in [battle["att"], battle["def"]]:
+		for d in battle["dice"][p]:
+			if d["t"] == "W":
+				k += 1
+	return D.WS_DICE - k
 
 
 func _battle_phase(s: int) -> void:
 	var o := other(s)
 	while true:
+		if exp_ws:
+			await _ws_pending(s)
+			await _ws_pending(o)
 		_apply_nation_ability(s)
 		var opts := []
 		for p in support_plays(s):
@@ -2034,9 +2093,15 @@ func _battle_phase(s: int) -> void:
 				log_msg("%s gioca %s." % [pname(s), p["label"]])
 				match p["kind"]:
 					"forza":
-						battle["bonus"][s] += [0, 1, 3, 5][p["n"]]
+						if p.get("ws", false):
+							await _roll_ws(s, p)
+						else:
+							battle["bonus"][s] += [0, 1, 3, 5][p["n"]]
 					"dado":
-						_roll_die(s, "F" if p["n"] == 1 else "T")
+						if p.get("ws", false):
+							await _roll_ws(s, p)
+						else:
+							_roll_die(s, "F" if p["n"] == 1 else "T")
 					"muovi":
 						battle["moved_in"][s] = true
 						await _move_in(s, "X")
@@ -3792,4 +3857,94 @@ func _cos_after_battle(bt: Dictionary, winner: int) -> void:
 				log_msg("%s mette una Carta Supporto sotto la Plancia: %s" % [pname(s), D.COSSACK_FX[op["fx"]]])
 			if not many:
 				break
+	changed.emit()
+
+
+# ---------------------------------------------------------------- Spirito di Guerra
+
+func _roll_ws(s: int, p: Dictionary) -> void:
+	var face := rng.randi() % 6
+	var d := {"t": "W", "v": D.DICE["W"][face], "sym": D.WS_SYMBOL[face], "src": p["kind"], "set": p["n"], "cards": (p["cards"] as Array).duplicate()}
+	battle["dice"][s].append(d)
+	_fx("roll", {"seat": s, "t": "W", "v": d["v"]})
+	if d["sym"]:
+		log_msg("%s lancia un Dado Spirito di Guerra: simbolo!" % pname(s))
+		await _ws_resolve(s, battle["dice"][s].size() - 1)
+	else:
+		log_msg("%s lancia un Dado Spirito di Guerra: %d." % [pname(s), d["v"]])
+	changed.emit()
+
+
+## Simboli usciti ritirando un Dado Spirito di Guerra: si risolvono appena possibile.
+func _ws_pending(s: int) -> void:
+	if battle.is_empty() or not battle["dice"].has(s):
+		return
+	for i in battle["dice"][s].size():
+		var d: Dictionary = battle["dice"][s][i]
+		if d["t"] == "W" and d.get("pend", false):
+			d["pend"] = false
+			await _ws_resolve(s, i)
+
+
+func _ws_resolve(s: int, i: int) -> void:
+	var d: Dictionary = battle["dice"][s][i]
+	d["pend"] = false
+	d["used"] = true          # il dado resta sulla carta: non si ritira più
+	if d.get("src", "dado") == "forza":
+		d["v"] = 3 if int(d.get("set", 2)) == 2 else 6
+		log_msg("Spirito di Guerra: il simbolo vale +%d Forza per %s." % [d["v"], pname(s)])
+		return
+	d["v"] = 0
+	var effs := []
+	for c in d.get("cards", []):
+		var e: String = D.SUPPORT[c].get("ws", "")
+		if e != "" and not (e in effs):
+			effs.append(e)
+	if effs.is_empty():
+		return
+	var eff: String = effs[0]
+	if effs.size() > 1:
+		var opts := []
+		for e in effs:
+			opts.append({"label": D.WS_FX[e], "ws": e})
+		eff = opts[await pick(s, "ws_effect", "Spirito di Guerra: quale effetto usi?", opts, {"battle": true})]["ws"]
+	log_msg("Spirito di Guerra: %s — %s" % [pname(s), D.WS_FX[eff]])
+	var o := other(s)
+	match eff:
+		"move":
+			var srcs := _move_in_sources(s, "X")
+			var r: int = battle["r"]
+			for a in move_adj(r):
+				if owner(a) == s:
+					for a2 in move_adj(a):
+						if a2 != r and reg[a2]["own"] == s and units_total(a2) > 0 and not (a2 in srcs):
+							srcs.append(a2)
+			if not srcs.is_empty():
+				await _move_in(s, "X", srcs)
+		"inf":
+			if reserve[s]["F"] > 0:
+				reserve[s]["F"] -= 1
+				if s == battle["att"]:
+					battle["u_att"].append({"t": "F", "from": battle["u_att"][0]["from"] if not battle["u_att"].is_empty() else battle["r"]})
+				else:
+					_put(battle["r"], s, "F")
+				_roll_die(s, "F")
+		"refresh":
+			var opts := []
+			for k in nowned[s].size():
+				if nowned[s][k]["rot"] or k in battle["nc_used"][s]:
+					opts.append({"label": D.nation_card_text(nat(s), nowned[s][k]["i"]), "k": k, "nation_card": nowned[s][k]["i"]})
+			if not opts.is_empty():
+				var j := await pick(s, "ws_refresh", "Spirito di Guerra: quale Carta Nazione ripristini?", opts, {"battle": true})
+				var k: int = opts[j]["k"]
+				nowned[s][k]["rot"] = false
+				battle["nc_used"][s].erase(k)
+		"max":
+			for dd in battle["dice"][s]:
+				if dd["t"] != "W":
+					dd["v"] = (D.DICE[dd["t"]] as Array).max()
+		"foe_dice":
+			battle["bonus"][s] += (battle["dice"][o] as Array).size()
+		"own_dice":
+			battle["bonus"][s] += (battle["dice"][s] as Array).size()
 	changed.emit()

@@ -8,7 +8,7 @@ extends RefCounted
 ## In battaglia calcola quanta Forza serve e spende le risorse più economiche per arrivarci.
 
 const D = preload("res://scripts/data/ti_data.gd")
-const EDIE := {"F": 0.667, "K": 1.5, "A": 2.167, "T": 2.0, "C": 1.0, "Q": 1.0}
+const EDIE := {"F": 0.667, "K": 1.5, "A": 2.167, "T": 2.0, "C": 1.0, "Q": 1.0, "W": 1.5}
 const UNIT_VAL := {"F": 1.0, "K": 1.5, "A": 1.8, "T": 3.0, "Q": 1.0}
 
 var level := 1
@@ -1367,6 +1367,8 @@ func _gain(eng, s: int, o: Dictionary) -> Dictionary:
 		"sup":
 			var p: Dictionary = o["play"]
 			var c: float = p["n"] * 1.0
+			if p.has("ev"):
+				return {"gain": float(p["ev"]), "cost": c}
 			match p["kind"]:
 				"forza": return {"gain": float([0, 1, 3, 5][p["n"]]), "cost": c}
 				"dado": return {"gain": EDIE["F"] if p["n"] == 1 else EDIE["T"], "cost": c}

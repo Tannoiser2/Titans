@@ -6,7 +6,7 @@ extends RefCounted
 # ---------------------------------------------------------------- unità e dadi
 
 const UNITS := ["F", "K", "A", "T", "Q"]       # Q = Cosacchi (Campi di Sangue)
-const UNIT_NAME := {"F": "Fanteria", "K": "Cavalleria", "A": "Artiglieria", "T": "Titano", "C": "Unità Caduta", "Q": "Cosacco"}
+const UNIT_NAME := {"F": "Fanteria", "K": "Cavalleria", "A": "Artiglieria", "T": "Titano", "C": "Unità Caduta", "Q": "Cosacco", "W": "Spirito di Guerra"}
 const UNIT_NAME_PL := {"F": "Fanterie", "K": "Cavallerie", "A": "Artiglierie", "T": "Titani", "Q": "Cosacchi"}
 const FIRE_NAME := "Artiglieria di Fuoco"
 ## Unità di ogni nazione (13: 6 Fanteria, 4 Cavalleria, 2 Artiglieria, 1 Titano).
@@ -19,11 +19,14 @@ const DICE := {
 	"T": [1, 1, 1, 2, 3, 4],
 	"C": [2, 1, 1, 2, 0, 0],       # Dado Unità Caduta (Echi del Passato)
 	"Q": [0, 0, 1, 1, 2, 2],       # Dado Cosacco (Campi di Sangue)
+	"W": [0, 0, 0, 2, 3, 4],       # Dado Spirito di Guerra: le tre facce da 0 hanno il simbolo
 }
 ## Facce del Dado Unità Caduta con il teschio (stesso ordine di DICE["C"]).
 const FALLEN_SKULL := [true, true, false, true, false, false]
 ## Limite di dadi per giocatore in battaglia.
-const DICE_LIMIT := {"F": 3, "K": 2, "A": 1, "T": 2, "C": 5, "Q": 8}
+const DICE_LIMIT := {"F": 3, "K": 2, "A": 1, "T": 2, "C": 5, "Q": 8, "W": 6}
+const WS_SYMBOL := [true, true, true, false, false, false]
+const WS_DICE := 6
 const MAX_ENERGY := 10
 const FORTRESSES := 3
 
@@ -206,8 +209,46 @@ const SUPPORT := [
 	{"kind": "forza", "req": ["own", "Q"], "deck": "fb", "cos": "blank"},
 	{"kind": "forza", "req": ["foe", "Q"], "deck": "fb", "cos": "dep"},
 	{"kind": "forza", "req": ["foe", "Q"], "deck": "fb", "cos": "reroll"},
+	# Spirito di Guerra: mazzo Supporto alternativo (indici 72-107), con i Dadi Spirito di Guerra
+	{"kind": "dado", "req": ["own", "F"], "deck": "sg", "ws": "move"},
+	{"kind": "dado", "req": ["foe", "F"], "deck": "sg", "ws": "move"},
+	{"kind": "dado", "req": ["own", "K"], "deck": "sg", "ws": "inf"},
+	{"kind": "dado", "req": ["foe", "K"], "deck": "sg", "ws": "inf"},
+	{"kind": "dado", "req": ["own", "A"], "deck": "sg", "ws": "refresh"},
+	{"kind": "dado", "req": ["foe", "A"], "deck": "sg", "ws": "refresh"},
+	{"kind": "dado", "req": ["own", "T"], "deck": "sg", "ws": "max"},
+	{"kind": "dado", "req": ["foe", "T"], "deck": "sg", "ws": "max"},
+	{"kind": "dado", "req": ["own", "F"], "deck": "sg", "ws": "foe_dice"},
+	{"kind": "dado", "req": ["foe", "F"], "deck": "sg", "ws": "foe_dice"},
+	{"kind": "dado", "req": ["own", "T"], "deck": "sg", "ws": "own_dice"},
+	{"kind": "dado", "req": ["foe", "T"], "deck": "sg", "ws": "own_dice"},
+	{"kind": "forza", "req": ["own", "F"], "deck": "sg"},
+	{"kind": "forza", "req": ["own", "K"], "deck": "sg"},
+	{"kind": "forza", "req": ["own", "A"], "deck": "sg"},
+	{"kind": "forza", "req": ["own", "T"], "deck": "sg"},
+	{"kind": "forza", "req": ["foe", "F"], "deck": "sg"},
+	{"kind": "forza", "req": ["foe", "K"], "deck": "sg"},
+	{"kind": "forza", "req": ["foe", "A"], "deck": "sg"},
+	{"kind": "forza", "req": ["foe", "T"], "deck": "sg"},
+	{"kind": "forza", "req": ["own", "F"], "deck": "sg"},
+	{"kind": "forza", "req": ["own", "K"], "deck": "sg"},
+	{"kind": "forza", "req": ["own", "A"], "deck": "sg"},
+	{"kind": "forza", "req": ["own", "T"], "deck": "sg"},
+	{"kind": "forza", "req": ["foe", "F"], "deck": "sg"},
+	{"kind": "forza", "req": ["foe", "K"], "deck": "sg"},
+	{"kind": "forza", "req": ["foe", "A"], "deck": "sg"},
+	{"kind": "forza", "req": ["foe", "T"], "deck": "sg"},
+	{"kind": "muovi", "req": ["own", "F"], "deck": "sg"},
+	{"kind": "muovi", "req": ["own", "K"], "deck": "sg"},
+	{"kind": "muovi", "req": ["own", "A"], "deck": "sg"},
+	{"kind": "muovi", "req": ["own", "T"], "deck": "sg"},
+	{"kind": "muovi", "req": ["own", "F"], "deck": "sg"},
+	{"kind": "muovi", "req": ["own", "K"], "deck": "sg"},
+	{"kind": "muovi", "req": ["own", "A"], "deck": "sg"},
+	{"kind": "muovi", "req": ["own", "T"], "deck": "sg"},
 ]
 const SUPPORT_BASE := 36
+const SUPPORT_FB := 72          # Campi di Sangue: indici 36-71; Spirito di Guerra: 72-107
 ## Simbolo dei Cosacchi delle carte di Campi di Sangue: Potenziamenti (sotto la Plancia) e Schieramento.
 const COSSACK_FX := {
 	"small": "Prima della Battaglia, se sei l'Attaccante con un'Armata più piccola che contiene Cosacchi: pesca 1 Carta Supporto. Una volta per Battaglia.",
@@ -226,6 +267,15 @@ const COSSACK_SHORT := {
 	"draw2": "pesca 1 carta per ogni Dado Cosacco da 2", "dep": "prendi 1 Cosacco",
 }
 const COSSACK_TOTAL := 15
+## Effetti speciali del simbolo sul Dado Spirito di Guerra (carte «Aggiungi un Dado» del mazzo Spirito di Guerra).
+const WS_FX := {
+	"move": "Muovi 1 tua Unità di 1 o 2 Regioni nella Battaglia (se fa due passi, il primo in una tua Regione).",
+	"inf": "Prendi 1 Fanteria dalla riserva, aggiungila alla Battaglia e tira un altro Dado Fanteria.",
+	"refresh": "Ripristina una tua Carta Nazione già usata: si può usare ancora in questo Round, anche in questa Battaglia.",
+	"max": "Porta tutti gli altri tuoi Dadi al valore massimo (non i Dadi Spirito di Guerra).",
+	"foe_dice": "+1 Forza per ogni Dado nella riserva dell'avversario.",
+	"own_dice": "+1 Forza per ogni Dado nella tua riserva.",
+}
 
 const SUPPORT_NAME := {"dado": "Aggiungi un Dado", "forza": "Aggiungi Forza", "muovi": "Muovi 1 Unità in Battaglia"}
 
@@ -360,6 +410,10 @@ static func support_text(i: int) -> String:
 		"muovi": t += "Effetto: muovi 1 tua Unità da una Regione adiacente nella Battaglia e lancia il suo Dado (1 per Battaglia)."
 	if c.has("cos"):
 		t += "\nSimbolo dei Cosacchi: " + COSSACK_FX[c["cos"]]
+	if c.get("deck", "") == "sg":
+		match c["kind"]:
+			"forza": t = t.replace("Effetto: +1 Forza; in coppia +3, in tris +5.", "Effetto: +1 Forza; in coppia o in tris 1 Dado Spirito di Guerra (il simbolo vale +3 in coppia, +6 in tris).")
+			"dado": t = t.replace("in coppia (2 carte «Aggiungi un Dado») +1 Dado Titano.", "in coppia 1 Dado Spirito di Guerra; se esce il simbolo: " + WS_FX[c["ws"]])
 	return t
 
 

@@ -210,6 +210,11 @@ func _xp_b() -> String:
 	s += "• Nella Fase A, una volta per turno, Azione speciale: muovi 1 Cosacco di 1 Regione, oppure metti una carta dalla mano sotto la Plancia come Potenziamento (mai due uguali), oppure, se non hai Cosacchi sulla mappa, scarta una carta con lo Schieramento e prendi 1 Cosacco.\n"
 	s += "• Con l'azione «Schiera 1 Unità» si può schierare un Cosacco; con i movimenti di «1 Unità» o «da 1 a 4 Unità» si muovono anche i Cosacchi. Un Cosacco che entra in una Regione non tua si ferma per quel turno.\n"
 	s += "• Dopo la Battaglia ognuno può usare il Simbolo dei Cosacchi delle carte giocate (non quelle scartate per ritirare): con 1–4 carte lo Schieramento (solo se non avevi Cosacchi in Battaglia) oppure 1 Potenziamento; con 5 o più lo Schieramento e 1 o 2 Potenziamenti.\n\n"
+	s += _h("Spirito di Guerra")
+	s += "Il mazzo Supporto è sostituito da quello di Spirito di Guerra (con Campi di Sangue i due mazzi si mescolano, le carte scoperte sono 6 e i set si fanno solo con carte dello stesso mazzo). I 6 Dadi Spirito di Guerra (simbolo, simbolo, simbolo, 2, 3, 4) sono in comune: se finiscono non si possono prendere.\n"
+	s += "• «Aggiungi Forza»: 1 carta +1 Forza; 2 o 3 carte 1 Dado Spirito di Guerra, e il simbolo vale +3 (2 carte) o +6 (3 carte).\n"
+	s += "• «Aggiungi un Dado»: 1 carta 1 Dado Fanteria; 2 carte 1 Dado Spirito di Guerra, e il simbolo attiva l'effetto di una delle due carte (muovere un'Unità di 1 o 2 Regioni nella Battaglia, aggiungere una Fanteria dalla riserva, ripristinare una Carta Nazione, portare al massimo gli altri dadi, +1 Forza per ogni dado dell'avversario o per ogni tuo dado).\n"
+	s += "• Un Dado Spirito di Guerra con il simbolo resta sulla carta e non si ritira più.\n\n"
 	s += _h("Interpretazioni della versione digitale")
 	s += "• Campi di Sangue: il Dado Cosacco ha due facce vuote, due da 1 e due da 2 (dalle scansioni si vedono le facce con le sciabole).\n"
 	s += "• Unità Cadute: non contano per la dimensione dell'Armata né per il controllo delle Regioni.\n"
@@ -246,5 +251,5 @@ func _digital() -> String:
 	s += "• Le carte Supporto giocate in coppia o in tris sono scelte automaticamente fra quelle con il requisito soddisfatto.\n"
 	s += "• Il Bogatyr russo può far ritirare un dado qualsiasi della Battaglia, anche dell'avversario.\n"
 	s += "• Lo spazio fisico delle regioni non è limitato.\n"
-	s += "• Non sono incluse (per ora) Spirito di Guerra e Potere dei Titani.\n"
+	s += "• Non è incluso (per ora) Potere dei Titani.\n"
 	return s

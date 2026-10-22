@@ -73,7 +73,7 @@ func _run() -> void:
 		seats[1]["automa"] = true
 		seats[1]["name"] = "Automa"
 	main.start_game({"seats": seats, "scenario": scen, "seed": 42, "ai_delay": 0.0, "advanced": mode == "adv", "solo": mode == "solo", "automa_adv": true,
-		"monuments": mode == "xp", "emissaries": mode == "xp", "fire": mode == "xp", "echoes": mode == "xp", "fields": mode == "xp"})
+		"monuments": mode == "xp", "emissaries": mode == "xp", "fire": mode == "xp", "echoes": mode == "xp", "fields": mode == "xp", "spirit": mode == "xp"})
 	await wait(30)
 	await shot("inizio")
 	# risponde con l'IA alle decisioni umane fino a una battaglia
