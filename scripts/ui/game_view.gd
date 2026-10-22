@@ -348,7 +348,7 @@ func _expansion_row(s: int) -> Control:
 	if engine.exp_echo and engine.fallen_card[s] >= 0:
 		var fc: Dictionary = D.FALLEN_CARDS[engine.fallen_card[s]]
 		var ft := UI.tex("res://assets/carte/caduta%d.jpg" % engine.fallen_card[s])
-		var fr := UI.icon_rect(ft, Vector2(38, 36))
+		var fr := UI.icon_rect(ft, Vector2(26, 40))
 		fr.mouse_filter = Control.MOUSE_FILTER_STOP
 		var ftxt := "Carta Unità Caduta\n%s\nAbilità negativa: %s" % [fc["gain_text"], fc["neg_text"]]
 		fr.tooltip_text = ftxt
@@ -810,7 +810,7 @@ func _show_pick(req: Dictionary) -> void:
 			continue
 		if o.has("fallen"):
 			var hbf := HBoxContainer.new()
-			hbf.add_child(UI.icon_rect(UI.tex("res://assets/carte/caduta%d.jpg" % o["fallen"]), Vector2(120, 114)))
+			hbf.add_child(UI.icon_rect(UI.tex("res://assets/carte/caduta%d.jpg" % o["fallen"]), Vector2(92, 138)))
 			var vbf := VBoxContainer.new()
 			var fcd: Dictionary = D.FALLEN_CARDS[o["fallen"]]
 			vbf.add_child(UI.wrap(UI.label("%s\nAbilità negativa: %s" % [fcd["gain_text"], fcd["neg_text"]], 14), 280))

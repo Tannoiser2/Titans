@@ -71,8 +71,7 @@ dove ritirarsi e schierare.
   nelle perdite è eliminata per ultima.
 - Emissari del Re: se l'Armata che lo accompagna è eliminata, l'Emissario torna fra quelli disponibili.
 - Echi del Passato: dado Unità Caduta 2☠, 2☠, 1☠, 1, 0, 0 (dalla copia fisica); le Unità Cadute non contano per la
-  dimensione dell'Armata né per il controllo; ogni carta abbina condizione e abilità negativa nell'ordine del
-  regolamento.
+  dimensione dell'Armata né per il controllo. Le 5 carte sono fotografate dalla copia fisica.
 - Non sono ancora incluse Campi di Sangue, Spirito di Guerra e Potere dei Titani (manca parte del materiale).
 
 ## Comandi

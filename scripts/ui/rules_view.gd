@@ -206,7 +206,7 @@ func _xp_b() -> String:
 	s += "• In Battaglia tirano 1 Dado Unità Caduta ciascuna (Forza 0, 1 o 2; alcune facce hanno il teschio). Dopo aver stabilito il vincitore si elimina 1 Unità Caduta per ogni teschio. Non si scelgono come perdite.\n"
 	s += "• Chi perde una Battaglia ottiene 1 Unità Caduta se soddisfa la condizione della sua carta; la carta ha anche un'abilità negativa che vale nelle Battaglie con le sue Unità Cadute.\n\n"
 	s += _h("Interpretazioni della versione digitale")
-	s += "• Unità Cadute: non contano per la dimensione dell'Armata né per il controllo delle Regioni. Ogni carta abbina la condizione e l'abilità negativa nell'ordine del regolamento.\n"
+	s += "• Unità Cadute: non contano per la dimensione dell'Armata né per il controllo delle Regioni.\n"
 	s += "• Il costo dei Monumenti è il numero romano della carta (I, II, III).\n"
 	s += "• Si costruisce al massimo 1 Monumento per turno. Castello Reale, San Basilio e Giannizzeri si attivano da soli, dopo le Battaglie o dopo la Fase D.\n"
 	s += "• Santa Sofia si perde se perdi la Regione su cui l'hai costruita.\n"
