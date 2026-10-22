@@ -307,7 +307,7 @@ func _player_panel(s: int) -> Control:
 
 ## Monumenti, Emissario del Re e Artiglieria di Fuoco di un giocatore.
 func _expansion_row(s: int) -> Control:
-	if not (engine.exp_mon or engine.exp_emi or engine.exp_fire):
+	if not (engine.exp_mon or engine.exp_emi or engine.exp_fire or engine.exp_echo):
 		return null
 	var nat := engine.nat(s)
 	var hb := HBoxContainer.new()
@@ -345,6 +345,17 @@ func _expansion_row(s: int) -> Control:
 			var where: String = engine.rname(e["r"]) if e["r"] >= 0 else "in Battaglia (%s)" % engine.rname(int(e.get("b", -1)))
 			ic.tooltip_text = "Emissario del Re: %s\n%s · con l'Armata in %s" % [D.EMISSARIES[e["k"]], "attivo" if e["on"] else "girato: tornerà attivo nella prossima Battaglia", where]
 			hb.add_child(ic)
+	if engine.exp_echo and engine.fallen_card[s] >= 0:
+		var fc: Dictionary = D.FALLEN_CARDS[engine.fallen_card[s]]
+		var ft := UI.tex("res://assets/carte/caduta%d.jpg" % engine.fallen_card[s])
+		var fr := UI.icon_rect(ft, Vector2(38, 36))
+		fr.mouse_filter = Control.MOUSE_FILTER_STOP
+		var ftxt := "Carta Unità Caduta\n%s\nAbilità negativa: %s" % [fc["gain_text"], fc["neg_text"]]
+		fr.tooltip_text = ftxt
+		fr.gui_input.connect(func(ev):
+			if ev is InputEventMouseButton and ev.pressed and ev.button_index == MOUSE_BUTTON_LEFT:
+				_zoom_card(ft, ftxt))
+		hb.add_child(fr)
 	var col := VBoxContainer.new()
 	col.add_theme_constant_override("separation", 0)
 	hb.add_child(col)
@@ -643,6 +654,10 @@ func _battle_side(s: int, role: String) -> Control:
 		var k := engine.army_count(s, t)
 		if k > 0:
 			parts.append("%d %s" % [k, (D.UNIT_NAME if k == 1 else D.UNIT_NAME_PL)[t]])
+	if bt.has("fal") and int(bt["fal"].get(s, 0)) > 0:
+		parts.append("%d Unità Cadut%s" % [bt["fal"][s], "a" if int(bt["fal"][s]) == 1 else "e"])
+	if engine.fire_in_battle(s):
+		parts.append("con l'Artiglieria di Fuoco")
 	vb.add_child(UI.label("Armata: " + (", ".join(parts) if not parts.is_empty() else "—"), 17))
 	var dice := DiceRow.new()
 	dice.view = self
@@ -668,6 +683,7 @@ func _battle_side(s: int, role: String) -> Control:
 class DiceRow extends Control:
 	var view
 	var seat := -1
+	var step := 66.0
 
 	func _ready() -> void:
 		mouse_filter = Control.MOUSE_FILTER_STOP
@@ -677,16 +693,18 @@ class DiceRow extends Control:
 		if eng.battle.is_empty() or not eng.battle["dice"].has(seat):
 			return
 		var dice: Array = eng.battle["dice"][seat]
-		var sz := 58.0
+		var sz := clampf(size.x / maxf(1.0, float(dice.size())) - 8.0, 30.0, 58.0)
+		step = sz + 8.0
+		var zero: bool = eng.battle.has("fz") and eng.battle["fz"].has(seat)
 		for i in dice.size():
 			var d: Dictionary = dice[i]
-			var r := Rect2(Vector2(4 + i * (sz + 8), 6), Vector2(sz, sz))
+			var r := Rect2(Vector2(4 + i * step, 6 + (58.0 - sz) * 0.5), Vector2(sz, sz))
 			var sel: bool = [seat, i] in view.sel_dice
-			UI.draw_die(self, r, d["t"], int(d["v"]), sel)
+			UI.draw_die(self, r, d["t"], int(d["v"]), sel, false, d.get("sk", false), zero and d["t"] == "C")
 
 	func _gui_input(ev: InputEvent) -> void:
 		if ev is InputEventMouseButton and ev.pressed and ev.button_index == MOUSE_BUTTON_LEFT:
-			var i := int((ev.position.x - 4) / 66.0)
+			var i := int((ev.position.x - 4) / step)
 			view._toggle_die(seat, i)
 
 	func _process(_d: float) -> void:
@@ -789,6 +807,18 @@ func _show_pick(req: Dictionary) -> void:
 			vbm.add_child(bm)
 			hbm.add_child(vbm)
 			flow.add_child(hbm)
+			continue
+		if o.has("fallen"):
+			var hbf := HBoxContainer.new()
+			hbf.add_child(UI.icon_rect(UI.tex("res://assets/carte/caduta%d.jpg" % o["fallen"]), Vector2(120, 114)))
+			var vbf := VBoxContainer.new()
+			var fcd: Dictionary = D.FALLEN_CARDS[o["fallen"]]
+			vbf.add_child(UI.wrap(UI.label("%s\nAbilità negativa: %s" % [fcd["gain_text"], fcd["neg_text"]], 14), 280))
+			var bf := UI.button("Scegli", 140, 36, 16)
+			bf.pressed.connect(func(): _provide(idx))
+			vbf.add_child(bf)
+			hbf.add_child(vbf)
+			flow.add_child(hbf)
 			continue
 		if o.has("emi"):
 			var be := UI.button(o["label"], 0, 56, 17)
@@ -939,6 +969,8 @@ func _on_region_hover(r: int) -> void:
 			lines.append("Capitale di %s%s" % [engine.pname(g["cap"]), "" if engine.capital_alive[g["cap"]] else " (distrutta)"])
 		if g["fort"]:
 			lines.append("Fortezza")
+		if g.get("fallen", 0) > 0:
+			lines.append("%d Unità Cadut%s" % [g["fallen"], "a" if g["fallen"] == 1 else "e"])
 		if g.get("fire", -1) >= 0:
 			lines.append("(una è l'Artiglieria di Fuoco: tira anche 1 Dado Fanteria)")
 		var gm: Array = g.get("mon", [])

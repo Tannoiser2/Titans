@@ -8,7 +8,7 @@ extends RefCounted
 ## In battaglia calcola quanta Forza serve e spende le risorse più economiche per arrivarci.
 
 const D = preload("res://scripts/data/ti_data.gd")
-const EDIE := {"F": 0.667, "K": 1.5, "A": 2.167, "T": 2.0}
+const EDIE := {"F": 0.667, "K": 1.5, "A": 2.167, "T": 2.0, "C": 1.0}
 const UNIT_VAL := {"F": 1.0, "K": 1.5, "A": 1.8, "T": 3.0}
 
 var level := 1
@@ -972,8 +972,19 @@ func _pick(eng, s: int, req: Dictionary) -> int:
 					bv = v
 					best = i
 			return best
-		"emi_move":
+		"emi_move", "fallen_move":
 			return 1 if req.get("battle_move", false) else 0
+		"echo_card":
+			var best := 0
+			var bv := -1e9
+			for i in opts.size():
+				var c: Dictionary = D.FALLEN_CARDS[opts[i]["fallen"]]
+				var v: float = {"lost": 3.0, "lost_smaller": 2.0, "lost_def": 2.0, "lost_nofallen": 1.5, "lost_2sup": 1.0}.get(c["gain"], 1.0)
+				v -= {"all_skull": 1.5, "reroll_zero": 0.6, "nc_round_zero": 0.6, "no_reroll": 0.4, "lose_plus2": 1.0}.get(c["neg"], 0.5)
+				if v > bv:
+					bv = v
+					best = i
+			return best
 		"spass":
 			var d: int = req.get("from", -1)
 			if d >= 0:

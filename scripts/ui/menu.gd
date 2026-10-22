@@ -19,7 +19,7 @@ var solo_me := ""               # Solitario: la nazione del giocatore (l'altra �
 var automa_lvl := 0             # 0 Base, 1 Avanzato
 var automa_row: Control
 var opt_rows: Array = []
-var xp := {"monuments": false, "emissaries": false, "fire": false}     # espansioni Kickstarter
+var xp := {"monuments": false, "emissaries": false, "fire": false, "echoes": false}     # espansioni Kickstarter
 var msg: Label
 var scen_box: VBoxContainer
 var seats_box: VBoxContainer
@@ -41,7 +41,9 @@ func _ready() -> void:
 		extended = st["ext"]
 		solo_me = st.get("solo_me", "")
 		automa_lvl = st.get("alvl", 0)
-		xp = st.get("xp", xp).duplicate()
+		var sx: Dictionary = st.get("xp", {})
+		for k in sx:
+			xp[k] = sx[k]
 	for nt in D.NATION_ORDER:
 		if not modes.has(nt):
 			modes[nt] = 2
@@ -158,11 +160,11 @@ func _ready() -> void:
 	opt_rows.append(orow)
 	rv.add_child(opt_rows[-1])
 	var xrow := HBoxContainer.new()
-	xrow.add_theme_constant_override("separation", 14)
+	xrow.add_theme_constant_override("separation", 8)
 	var xl := UI.label("Espansioni", 22, Color.WHITE, UI.font_head_b)
 	xl.custom_minimum_size.x = 170
 	xrow.add_child(xl)
-	for kv in [["monuments", "Monumenti", "Ogni Nazione ha 3 Monumenti da costruire con le Carte Supporto"], ["emissaries", "Emissari del Re", "3 Obiettivi Nazione segreti: il primo dà un Emissario che accompagna un'Armata, poi 3 e 5 PV"], ["fire", "Pioggia di Fuoco", "Un'Artiglieria di Fuoco per Nazione: conta come Artiglieria e tira anche 1 Dado Fanteria"]]:
+	for kv in [["monuments", "Monumenti", "Ogni Nazione ha 3 Monumenti da costruire con le Carte Supporto"], ["emissaries", "Emissari", "3 Obiettivi Nazione segreti: il primo dà un Emissario che accompagna un'Armata, poi 3 e 5 PV"], ["fire", "Pioggia di Fuoco", "Un'Artiglieria di Fuoco per Nazione: conta come Artiglieria e tira anche 1 Dado Fanteria"], ["echoes", "Echi del Passato", "Unità Cadute che seguono le Armate e tirano i loro dadi in Battaglia; ognuno ha una carta con un'abilità negativa"]]:
 		var cb := CheckBox.new()
 		cb.text = kv[1]
 		cb.tooltip_text = kv[2]
@@ -399,7 +401,7 @@ func _config() -> Dictionary:
 	if nplayers == 1:
 		return {"seats": seats, "scenario": scen_id, "ai_delay": speeds[speed], "solo": true, "automa_adv": automa_lvl == 1, "advanced": false, "capital_capture": false, "extended": false}
 	return {"seats": seats, "scenario": scen_id, "ai_delay": speeds[speed], "advanced": advanced, "capital_capture": capital_capture, "extended": extended,
-		"monuments": xp["monuments"], "emissaries": xp["emissaries"], "fire": xp["fire"]}
+		"monuments": xp["monuments"], "emissaries": xp["emissaries"], "fire": xp["fire"], "echoes": xp["echoes"]}
 
 
 func _on_start() -> void:

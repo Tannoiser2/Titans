@@ -28,6 +28,8 @@ copia fisica e dal modulo Tabletop Simulator.
     aiutano in Battaglia e si girano dopo la vittoria;
   - **Pioggia di Fuoco**: l'Artiglieria di Fuoco di ogni Nazione (Artiglieria + Fanteria che diventano una sola
     Unità che tira anche un Dado Fanteria), con la sua miniatura arroventata.
+  - **Echi del Passato**: le 12 Unità Cadute (miniature spettrali), i loro dadi con il teschio e le 5 carte con
+    condizione e abilità negativa.
 - **IA** a tre livelli in qualunque combinazione con i giocatori umani; più umani sullo stesso dispositivo con la
   schermata «passa il dispositivo».
 - **Gioco online** su Firebase: ognuno dal suo dispositivo con un codice di 4 lettere.
@@ -68,8 +70,10 @@ dove ritirarsi e schierare.
 - Pioggia di Fuoco: quando un'Artiglieria lascia una Regione con l'Artiglieria di Fuoco si muove quella di Fuoco;
   nelle perdite è eliminata per ultima.
 - Emissari del Re: se l'Armata che lo accompagna è eliminata, l'Emissario torna fra quelli disponibili.
-- Non sono ancora incluse Campi di Sangue, Echi del Passato, Spirito di Guerra e Potere dei Titani (manca parte
-  del materiale: dadi speciali e mazzi di carte).
+- Echi del Passato: dado Unità Caduta 2☠, 2☠, 1☠, 1, 0, 0 (dalla copia fisica); le Unità Cadute non contano per la
+  dimensione dell'Armata né per il controllo; ogni carta abbina condizione e abilità negativa nell'ordine del
+  regolamento.
+- Non sono ancora incluse Campi di Sangue, Spirito di Guerra e Potere dei Titani (manca parte del materiale).
 
 ## Comandi
 Trascina con il tasto sinistro per ruotare la vista, con il destro per spostarla, rotella per lo zoom; «Vista»
@@ -105,7 +109,7 @@ tests/                        simulazioni, screenshot, prova online con finto Fi
 godot --headless --path . -s tests/sim.gd -- 10 3 1          # 10 partite fra IA, 3 giocatori, livello Normale
 godot --headless --path . -s tests/sim.gd -- 10 2 1 1        # …in Modalità Avanzata
 TI_SOLO=1 godot --headless --path . -s tests/sim.gd -- 10 2 1 # IA contro l'Automa Base (TI_SOLO=2 Avanzato)
-TI_XP=mef godot --headless --path . -s tests/sim.gd -- 10 4 1 # con Monumenti, Emissari e Pioggia di Fuoco
+TI_XP=mefc godot --headless --path . -s tests/sim.gd -- 10 4 1 # con Monumenti, Emissari, Pioggia di Fuoco ed Echi del Passato
 python3 tests/firebase_mock.py 8765 & …tests/online_play.gd  # due dispositivi online sul finto Firebase
 xvfb-run godot --path . -s res://tests/shot.gd -- game       # screenshot
 ```

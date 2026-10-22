@@ -6,7 +6,7 @@ extends RefCounted
 # ---------------------------------------------------------------- unità e dadi
 
 const UNITS := ["F", "K", "A", "T"]
-const UNIT_NAME := {"F": "Fanteria", "K": "Cavalleria", "A": "Artiglieria", "T": "Titano"}
+const UNIT_NAME := {"F": "Fanteria", "K": "Cavalleria", "A": "Artiglieria", "T": "Titano", "C": "Unità Caduta"}
 const UNIT_NAME_PL := {"F": "Fanterie", "K": "Cavallerie", "A": "Artiglierie", "T": "Titani"}
 const FIRE_NAME := "Artiglieria di Fuoco"
 ## Unità di ogni nazione (13: 6 Fanteria, 4 Cavalleria, 2 Artiglieria, 1 Titano).
@@ -17,9 +17,12 @@ const DICE := {
 	"K": [1, 1, 1, 2, 2, 2],
 	"A": [1, 2, 2, 2, 3, 3],
 	"T": [1, 1, 1, 2, 3, 4],
+	"C": [2, 1, 1, 2, 0, 0],       # Dado Unità Caduta (Echi del Passato)
 }
+## Facce del Dado Unità Caduta con il teschio (stesso ordine di DICE["C"]).
+const FALLEN_SKULL := [true, true, false, true, false, false]
 ## Limite di dadi per giocatore in battaglia.
-const DICE_LIMIT := {"F": 3, "K": 2, "A": 1, "T": 2}
+const DICE_LIMIT := {"F": 3, "K": 2, "A": 1, "T": 2, "C": 5}
 const MAX_ENERGY := 10
 const FORTRESSES := 3
 
@@ -400,6 +403,21 @@ const MONUMENTS := {
 		{"key": "town_sri", "name": "Municipio", "cost": 3, "when": "battaglia", "text": "In una Battaglia nella Regione del Monumento o in una adiacente puoi giocare gratis 1 delle prime 3 Carte Nazione del tuo mazzo, solo per quella Battaglia; poi va in fondo al mazzo."},
 	],
 }
+
+## Echi del Passato: 5 carte Unità Caduta (abilità negativa + condizione per ottenere un'Unità Caduta).
+const FALLEN_CARDS := [
+	{"neg": "all_skull", "neg_text": "Ogni faccia dei tuoi Dadi Unità Caduta conta come se avesse il teschio.",
+		"gain": "lost", "gain_text": "Ottieni 1 Unità Caduta dopo aver perso una Battaglia."},
+	{"neg": "reroll_zero", "neg_text": "Se scarti una Carta Supporto per ritirare i dadi, non ottieni Forza dai Dadi Unità Caduta.",
+		"gain": "lost_smaller", "gain_text": "Ottieni 1 Unità Caduta dopo aver perso una Battaglia in cui avevi l'Armata più piccola."},
+	{"neg": "nc_round_zero", "neg_text": "Se usi una Carta Nazione «1 volta per Round», non ottieni Forza dai Dadi Unità Caduta.",
+		"gain": "lost_def", "gain_text": "Ottieni 1 Unità Caduta dopo aver perso una Battaglia in cui eri il difensore."},
+	{"neg": "no_reroll", "neg_text": "Non puoi ritirare o cambiare faccia ai Dadi Unità Caduta dopo il tiro iniziale.",
+		"gain": "lost_nofallen", "gain_text": "Ottieni 1 Unità Caduta dopo aver perso una Battaglia in cui non avevi Unità Cadute."},
+	{"neg": "lose_plus2", "neg_text": "Se perdi una Battaglia in cui hai Unità Cadute, l'avversario aggiunge 2 Forza nell'Esito della Battaglia.",
+		"gain": "lost_2sup", "gain_text": "Ottieni 1 Unità Caduta dopo aver perso una Battaglia in cui hai giocato almeno 2 Carte Supporto per i loro poteri."},
+]
+const FALLEN_TOTAL := 12
 
 ## Emissari del Re: segnalini che accompagnano un'Armata e la aiutano in Battaglia.
 const EMISSARIES := {

@@ -118,6 +118,9 @@ var emi_pool: Array = []         # Emissari ancora disponibili
 var nobj_hand: Array = []        # Obiettivi Nazione ancora da completare (indici 0..2)
 var nobj_done: Array = []
 var fire_free: Array = []        # per posto: l'Artiglieria di Fuoco è nella riserva
+var exp_echo := false            # Echi del Passato
+var fallen_pool := 0             # Unità Cadute nella riserva comune
+var fallen_card: Array = []      # per posto: carta Unità Caduta (indice di D.FALLEN_CARDS) o -1
 
 
 # ================================================================ preparazione
@@ -140,6 +143,7 @@ func setup(config: Dictionary) -> void:
 	exp_mon = bool(config.get("monuments", false)) and not solo
 	exp_emi = bool(config.get("emissaries", false)) and not solo
 	exp_fire = bool(config.get("fire", false)) and not solo
+	exp_echo = bool(config.get("echoes", false)) and not solo
 	for s in config["seats"]:
 		if bool(s.get("automa", false)):
 			automa = players.size()
@@ -161,7 +165,7 @@ func setup(config: Dictionary) -> void:
 	central = int(scen["central"])
 	reg = {}
 	for r in regions:
-		reg[r] = {"own": -1, "n": {"F": 0, "K": 0, "A": 0, "T": 0}, "tok": -1, "cap": -1, "capctrl": -1, "fort": false, "fire": -1, "mon": []}
+		reg[r] = {"own": -1, "n": {"F": 0, "K": 0, "A": 0, "T": 0}, "tok": -1, "cap": -1, "capctrl": -1, "fort": false, "fire": -1, "mon": [], "fallen": 0}
 	reserve = []
 	titan = []
 	vp = []
@@ -182,6 +186,8 @@ func setup(config: Dictionary) -> void:
 	nobj_hand = []
 	nobj_done = []
 	fire_free = []
+	fallen_card = []
+	fallen_pool = D.FALLEN_TOTAL
 	mon_built_turn = {}
 	mon_declined = {}
 	mon_used = {}
@@ -193,6 +199,7 @@ func setup(config: Dictionary) -> void:
 		nobj_hand.append([])
 		nobj_done.append([])
 		fire_free.append(exp_fire)
+		fallen_card.append(-1)
 		reserve.append({"F": D.UNIT_COUNT["F"], "K": D.UNIT_COUNT["K"], "A": D.UNIT_COUNT["A"]})
 		titan.append("up")
 		vp.append(0)
@@ -667,6 +674,8 @@ func _initial_setup() -> void:
 		for k in emi_pool:
 			names.append(D.EMISSARIES[k])
 		log_msg("Emissari del Re: ognuno riceve i 3 Obiettivi Nazione. Emissari disponibili: %s." % "; ".join(names))
+	if exp_echo:
+		await _echo_setup()
 	# obiettivi segreti: 4 a testa, se ne tiene 1 e si passa a destra
 	var packs := []
 	for s in n:
@@ -870,6 +879,7 @@ func _turn(s: int) -> void:
 	await _check_objectives_all()
 	await _end_turn_holds(s)
 	_fix_emissaries()
+	_fix_fallen()
 	cur_order = -1
 	phase = "play"
 	changed.emit()
@@ -1064,6 +1074,13 @@ func _move_units(s: int, src: int, dst: int, cnt: Dictionary) -> void:
 		else:
 			var to_battle := _enemy_units(s, dst) or not _battle_at(dst, s).is_empty()
 			emi_go = await yesno(s, "emi_move", "L'Emissario del Re (%s) segue le Unità che muovi?" % D.EMISSARIES[emi[s]["k"]], {"battle_move": to_battle}, "Resta", "Segue")
+	var fallen_go := 0
+	if exp_echo and reg[src]["fallen"] > 0:
+		var fk: int = reg[src]["fallen"]
+		var to_b := _enemy_units(s, dst) or not _battle_at(dst, s).is_empty()
+		if units_total(src) - moving <= 0 or await yesno(s, "fallen_move", "Le %d Unità Cadute in %s seguono le Unità che muovi?" % [fk, rname(src)], {"battle_move": to_b}, "Restano", "Seguono"):
+			fallen_go = fk
+			reg[src]["fallen"] = 0
 	var fire_go := false
 	if cnt.has("A") and reg[src]["fire"] == s:
 		fire_go = true
@@ -1093,9 +1110,12 @@ func _move_units(s: int, src: int, dst: int, cnt: Dictionary) -> void:
 		if emi_go:
 			emi[s]["r"] = -2
 			emi[s]["b"] = dst
+		if fallen_go > 0:
+			b["fallen"] = int(b.get("fallen", 0)) + fallen_go
 		if joined:
 			log_msg("%s si unisce alla Battaglia in %s con %s." % [pname(s), rname(dst), ", ".join(desc)])
 		_check_monuments()
+		_fix_fallen()
 		changed.emit()
 		return
 	# regione libera, propria o nemica senza unità
@@ -1108,10 +1128,14 @@ func _move_units(s: int, src: int, dst: int, cnt: Dictionary) -> void:
 		reg[dst]["fire"] = s
 	if emi_go:
 		emi[s]["r"] = dst
+	if fallen_go > 0:
+		reg[dst]["fallen"] += fallen_go
+		desc.append("%d Unità Cadut%s" % [fallen_go, "a" if fallen_go == 1 else "e"])
 	log_msg("%s muove %s da %s a %s." % [pname(s), ", ".join(desc), rname(src), rname(dst)])
 	if o != s:
 		_gained(s, dst)
 	_check_monuments()
+	_fix_fallen()
 	changed.emit()
 
 
@@ -1272,6 +1296,9 @@ func _pre_phase_a(s: int) -> void:
 					_put(dst, s, "F")
 					if exp_emi and not emi[s].is_empty() and emi[s]["r"] == src and units_total(src) == 0:
 						emi[s]["r"] = dst
+					if units_total(src) == 0 and reg[src]["fallen"] > 0:
+						reg[dst]["fallen"] += reg[src]["fallen"]
+						reg[src]["fallen"] = 0
 					log_msg("%s muove 1 Fanteria da %s a %s (Carta Nazione)." % [pname(s), rname(src), rname(dst)])
 					_fx("move", {"seat": s, "from": src, "to": dst, "units": {"F": 1}})
 	# scambio di Carte Ordini (Modalità Avanzata)
@@ -1329,6 +1356,7 @@ func _resolve_battle(b: Dictionary) -> void:
 				reg[r]["fire"] = att
 		if exp_emi and not emi[att].is_empty() and emi[att]["r"] == -2 and emi[att].get("b", -1) == r:
 			emi[att]["r"] = r
+		reg[r]["fallen"] += int(b.get("fallen", 0))
 		log_msg("%s entra in %s senza combattere." % [pname(att), rname(r)])
 		if o != att:
 			_gained(att, r)
@@ -1341,7 +1369,9 @@ func _resolve_battle(b: Dictionary) -> void:
 		"first": dfn, "acting": -1, "done": {}, "nab": {}, "titan_ab": {}, "moved_in": {}, "nc_used": {att: [], dfn: []},
 		"sup_used": {att: 0, dfn: 0}, "sup_any": {att: false, dfn: false}, "ignore_req": {}, "size0": {},
 		"winner": -1, "diff": 0, "emi": {}, "mon_nc": {}, "cap_region": reg[r]["cap"] >= 0,
+		"fal": {att: int(b.get("fallen", 0)), dfn: int(reg[r]["fallen"])}, "fz": {}, "retreat_to": {},
 	}
+	bt["fal0"] = bt["fal"].duplicate()
 	battle = bt
 	log_msg("Battaglia in %s: %s attacca %s." % [rname(r), pname(att), pname(dfn)])
 	_fx("battle", {"r": r})
@@ -1377,6 +1407,8 @@ func _resolve_battle(b: Dictionary) -> void:
 		if fire_in_battle(s) and can_roll(s, "F"):
 			_roll_die(s, "F", true)
 			log_msg("L'Artiglieria di Fuoco di %s tira anche 1 Dado Fanteria." % pname(s))
+		for i in int(bt["fal"][s]):
+			_roll_die(s, "C", true)
 	bt["rolled"] = true
 	_apply_nation_ability(att)
 	_apply_nation_ability(dfn)
@@ -1402,7 +1434,11 @@ func _resolve_battle(b: Dictionary) -> void:
 	log_msg("Esito: %s %d — %s %d. Vince %s." % [pname(att), sa, pname(dfn), sd, pname(winner)])
 	changed.emit()
 	await _after_win_cards(winner)
+	_fallen_skulls()
 	var diff := absi(strength(att) - strength(dfn))
+	if exp_echo and _fallen_neg(loser) == "lose_plus2" and int(bt["fal0"][loser]) > 0:
+		diff += 2
+		log_msg("Unità Cadute: %s aggiunge 2 Forza nell'Esito della Battaglia." % pname(winner))
 	bt["diff"] = diff
 	var snap := {}
 	for s in [att, dfn]:
@@ -1416,6 +1452,8 @@ func _resolve_battle(b: Dictionary) -> void:
 	bt["only_titan"] = {att: snap[att]["T"] > 0 and army_size(att) == 1, dfn: snap[dfn]["T"] > 0 and army_size(dfn) == 1}
 	await _apply_outcome(bt, winner, loser, diff)
 	bt["post"] = snap
+	if exp_echo:
+		await _fallen_gain(bt, loser)
 	stats[winner]["won"] += 1
 	stats[loser]["lost"] += 1
 	await _after_battle_cards(att)
@@ -1425,6 +1463,7 @@ func _resolve_battle(b: Dictionary) -> void:
 	phase = "battles"
 	_check_monuments()
 	_fix_emissaries()
+	_fix_fallen()
 	changed.emit()
 
 
@@ -1463,7 +1502,10 @@ func strength(s: int) -> int:
 	if battle.is_empty():
 		return 0
 	var t: int = battle["bonus"][s]
+	var zero: bool = battle.has("fz") and battle["fz"].has(s)
 	for d in battle["dice"][s]:
+		if zero and d["t"] == "C":
+			continue
 		t += int(d["v"])
 	return t
 
@@ -1485,8 +1527,12 @@ func _roll_die(s: int, t: String, quiet := false) -> int:
 		if not quiet:
 			log_msg("%s non ha più Dadi %s disponibili." % [pname(s), D.UNIT_NAME[t]])
 		return -1
-	var v: int = D.DICE[t][rng.randi() % 6]
-	battle["dice"][s].append({"t": t, "v": v})
+	var face := rng.randi() % 6
+	var v: int = D.DICE[t][face]
+	var die := {"t": t, "v": v}
+	if t == "C":
+		die["sk"] = D.FALLEN_SKULL[face]
+	battle["dice"][s].append(die)
 	if not quiet:
 		log_msg("%s lancia un Dado %s: %d." % [pname(s), D.UNIT_NAME[t], v])
 	_fx("roll", {"seat": s, "t": t, "v": v})
@@ -1495,7 +1541,10 @@ func _roll_die(s: int, t: String, quiet := false) -> int:
 
 func _reroll(s: int, i: int) -> void:
 	var d: Dictionary = battle["dice"][s][i]
-	d["v"] = D.DICE[d["t"]][rng.randi() % 6]
+	var face := rng.randi() % 6
+	d["v"] = D.DICE[d["t"]][face]
+	if d["t"] == "C":
+		d["sk"] = D.FALLEN_SKULL[face]
 
 
 func _apply_nation_ability(s: int) -> void:
@@ -1609,6 +1658,8 @@ func _use_nation_card(s: int, k: int) -> void:
 	var c := D.nation_card(nat(s), oc["i"])
 	if c["freq"] == "round":
 		oc["rot"] = true
+		if not battle.is_empty() and _fallen_neg(s) == "nc_round_zero":
+			_fallen_zero(s)
 	if not battle.is_empty():
 		battle["nc_used"][s].append(k)
 	log_msg("%s usa una Carta Nazione: %s" % [pname(s), D.nation_card_text(nat(s), oc["i"])])
@@ -1637,7 +1688,7 @@ func _effect(s: int, eff: String) -> void:
 		"vp":
 			_add_vp(s, 1, "Carta Nazione")
 		"dice2_str3":
-			var items := _dice_items(s)
+			var items := _dice_items(s, false)
 			var sel := await pick_dice(s, "drop_dice", "Scarta 2 Dadi della tua Riserva (+3 Forza)", items, 2, 2)
 			var idx := []
 			for it in sel:
@@ -1685,6 +1736,8 @@ func _effect(s: int, eff: String) -> void:
 			for c in dc:
 				discard_support(s, c)
 			battle["sup_any"][s] = true
+			if _fallen_neg(s) == "reroll_zero":
+				_fallen_zero(s)
 			for k in 2:
 				changed.emit()
 				var sel := await pick_dice(s, "reroll", "Ritiro %d di 2: scegli i Dadi da ritirare" % (k + 1), _dice_items(s), 0, 99)
@@ -1694,9 +1747,12 @@ func _effect(s: int, eff: String) -> void:
 	changed.emit()
 
 
-func _dice_items(s: int) -> Array:
+func _dice_items(s: int, change := true) -> Array:
 	var items := []
+	var lock: bool = change and exp_echo and _fallen_neg(s) == "no_reroll"
 	for i in battle["dice"][s].size():
+		if lock and battle["dice"][s][i]["t"] == "C":
+			continue
 		items.append([s, i])
 	return items
 
@@ -1706,6 +1762,8 @@ func _max_die(s: int) -> void:
 	for it in sel:
 		var d: Dictionary = battle["dice"][s][it[1]]
 		d["v"] = (D.DICE[d["t"]] as Array).max()
+		if d["t"] == "C":
+			d["sk"] = true
 		log_msg("%s porta un Dado %s al massimo (%d)." % [pname(s), D.UNIT_NAME[d["t"]], d["v"]])
 
 
@@ -1934,6 +1992,8 @@ func _battle_phase(s: int) -> void:
 				for c in dc:
 					discard_support(s, c)
 				battle["sup_any"][s] = true
+				if _fallen_neg(s) == "reroll_zero":
+					_fallen_zero(s)
 				var sel := await pick_dice(s, "reroll", "Scegli i Dadi da ritirare", _dice_items(s), 1, 99)
 				var vals := []
 				for it in sel:
@@ -2097,6 +2157,14 @@ func _apply_outcome(bt: Dictionary, winner: int, loser: int, diff: int) -> void:
 				emi[att]["r"] = back
 			else:
 				_lose_emissary(att)
+		var fa := int(bt["fal"].get(att, 0))
+		if fa > 0:
+			if back >= 0:
+				reg[back]["fallen"] += fa
+			else:
+				fallen_pool += fa
+			bt["fal"][att] = 0
+		bt["retreat_to"][att] = back
 		if not bt["u_att"].is_empty():
 			log_msg("%s ritira le sue Unità." % pname(att))
 		_fx("retreat", {"seat": att, "r": r})
@@ -2110,6 +2178,8 @@ func _apply_outcome(bt: Dictionary, winner: int, loser: int, diff: int) -> void:
 		reg[r]["n"] = {"F": 0, "K": 0, "A": 0, "T": 0}
 		reg[r]["own"] = -1
 		var emi_here: bool = exp_emi and not emi[dfn].is_empty() and emi[dfn]["r"] == r
+		var fd: int = reg[r]["fallen"]
+		reg[r]["fallen"] = 0
 		if cnt > 0:
 			var mine := move_adj(r).filter(func(x): return owner(x) == dfn)
 			var free := move_adj(r).filter(func(x): return owner(x) == -1)
@@ -2125,6 +2195,7 @@ func _apply_outcome(bt: Dictionary, winner: int, loser: int, diff: int) -> void:
 					reserve[dfn]["A"] -= 1
 					fire_free[dfn] = true
 				bt["wiped"] = true
+				fallen_pool += fd
 				if emi_here:
 					_lose_emissary(dfn)
 				log_msg("%s non ha dove ritirarsi: le Unità rimaste sono distrutte." % pname(dfn))
@@ -2138,11 +2209,14 @@ func _apply_outcome(bt: Dictionary, winner: int, loser: int, diff: int) -> void:
 					reg[dst]["fire"] = dfn
 				if emi_here:
 					emi[dfn]["r"] = dst
+				reg[dst]["fallen"] += fd
+				bt["retreat_to"][dfn] = dst
 				log_msg("%s si ritira in %s." % [pname(dfn), rname(dst)])
 				_fx("move", {"seat": dfn, "from": r, "to": dst, "units": left})
 				if was_free:
 					_gained(dfn, dst)
 		else:
+			fallen_pool += fd
 			if had_fire:
 				fire_free[dfn] = true
 			if emi_here:
@@ -2157,6 +2231,7 @@ func _apply_outcome(bt: Dictionary, winner: int, loser: int, diff: int) -> void:
 				reg[r]["fire"] = att
 		if exp_emi and not emi[att].is_empty() and emi[att]["r"] == -2 and emi[att].get("b", -1) == r:
 			emi[att]["r"] = r
+		reg[r]["fallen"] += int(bt["fal"].get(att, 0))
 		_fx("move", {"seat": att, "from": -1, "to": r, "units": {}})
 		if g["fort"]:
 			g["fort"] = false
@@ -3349,3 +3424,124 @@ func _mon_town_sri(s: int) -> void:
 	ndeck[s].append(ci)
 	log_msg("Municipio: %s gioca gratis la Carta Nazione %s." % [pname(s), D.nation_card_text(nat(s), ci)])
 	await _effect(s, D.nation_card(nat(s), ci)["eff"])
+
+
+# ---------------------------------------------------------------- Echi del Passato
+
+func _fallen_neg(s: int) -> String:
+	if not exp_echo or s < 0 or fallen_card[s] < 0:
+		return ""
+	return D.FALLEN_CARDS[fallen_card[s]]["neg"]
+
+
+## Preparazione: ognuno sceglie una carta Unità Caduta (dall'ultimo giocatore, in senso antiorario) e poi
+## mette 1 Unità Caduta in una propria Regione con Unità.
+func _echo_setup() -> void:
+	var face := range(D.FALLEN_CARDS.size())
+	_shuffle(face)
+	face = face.slice(0, mini(n, face.size()))
+	var order := []
+	for i in n:
+		order.append(posmod(first - 1 - i, n))
+	for s in order:
+		var opts := []
+		for ci in face:
+			var c: Dictionary = D.FALLEN_CARDS[ci]
+			opts.append({"label": "%s / %s" % [c["gain_text"], c["neg_text"]], "fallen": ci})
+		var k := await pick(s, "echo_card", "Echi del Passato: scegli una carta Unità Caduta", opts)
+		fallen_card[s] = opts[k]["fallen"]
+		face.erase(fallen_card[s])
+		log_msg("%s prende la carta Unità Caduta: %s" % [pname(s), D.FALLEN_CARDS[fallen_card[s]]["gain_text"]])
+	for s in order:
+		await _place_fallen(s, _own_army_regions(s), "Echi del Passato: dove metti la tua Unità Caduta?")
+	changed.emit()
+
+
+func _own_army_regions(s: int) -> Array:
+	var out := []
+	for r in regions:
+		if reg[r]["own"] == s and units_total(r) > 0:
+			out.append(r)
+	return out
+
+
+func _place_fallen(s: int, rs: Array, title: String) -> void:
+	if rs.is_empty() or fallen_pool <= 0:
+		return
+	var r: int = rs[0]
+	if rs.size() > 1:
+		r = await pick_region(s, "fallen_place", title, rs, false)
+	reg[r]["fallen"] += 1
+	fallen_pool -= 1
+	log_msg("%s ottiene 1 Unità Caduta in %s." % [pname(s), rname(r)])
+	_fx("deploy", {"seat": s, "t": "F", "r": r})
+
+
+func _fallen_zero(s: int) -> void:
+	if battle.is_empty() or int(battle["fal"].get(s, 0)) <= 0 or battle["fz"].has(s):
+		return
+	battle["fz"][s] = true
+	log_msg("Unità Cadute: %s non ottiene Forza dai Dadi Unità Caduta in questa Battaglia." % pname(s))
+
+
+## Dopo aver stabilito il vincitore: 1 Unità Caduta eliminata per ogni teschio sui propri dadi.
+func _fallen_skulls() -> void:
+	if not exp_echo:
+		return
+	for s in [battle["att"], battle["def"]]:
+		var have := int(battle["fal"].get(s, 0))
+		if have <= 0:
+			continue
+		var k := 0
+		for d in battle["dice"][s]:
+			if d["t"] == "C" and (d.get("sk", false) or _fallen_neg(s) == "all_skull"):
+				k += 1
+		k = mini(k, have)
+		if k <= 0:
+			continue
+		battle["fal"][s] = have - k
+		if s == battle["def"]:
+			reg[battle["r"]]["fallen"] -= k
+		fallen_pool += k
+		log_msg("%s perde %d Unità Cadut%s (teschi sui dadi)." % [pname(s), k, "a" if k == 1 else "e"])
+
+
+## Dopo l'esito: lo sconfitto può ottenere 1 Unità Caduta, secondo la sua carta.
+func _fallen_gain(bt: Dictionary, loser: int) -> void:
+	if fallen_card[loser] < 0 or fallen_pool <= 0:
+		return
+	var winner := other(loser)
+	var ok := false
+	match D.FALLEN_CARDS[fallen_card[loser]]["gain"]:
+		"lost":
+			ok = true
+		"lost_smaller":
+			ok = int(bt["size0"][loser]) < int(bt["size0"][winner])
+		"lost_def":
+			ok = loser == bt["def"]
+		"lost_nofallen":
+			ok = int(bt["fal0"][loser]) == 0
+		"lost_2sup":
+			ok = int(bt["sup_used"][loser]) >= 2
+	if not ok:
+		return
+	var dst: int = bt["retreat_to"].get(loser, -1)
+	if loser == bt["def"] and dst < 0 and reg[bt["r"]]["own"] == loser:
+		dst = bt["r"]
+	if dst >= 0 and reg[dst]["own"] == loser and units_total(dst) > 0:
+		await _place_fallen(loser, [dst], "")
+		return
+	var rs := adj(bt["r"]).filter(func(x): return reg[x]["own"] == loser and units_total(x) > 0)
+	await _place_fallen(loser, rs, "Unità Caduta: in quale Regione adiacente con le tue Unità?")
+
+
+## Le Unità Cadute lasciate sole disertano e tornano nella riserva comune.
+func _fix_fallen() -> void:
+	if not exp_echo:
+		return
+	for r in regions:
+		var g: Dictionary = reg[r]
+		if g["fallen"] > 0 and (g["own"] < 0 or units_total(r) == 0):
+			log_msg("%d Unità Cadut%s rimast%s sol%s in %s disertano." % [g["fallen"], "a" if g["fallen"] == 1 else "e", "a" if g["fallen"] == 1 else "e", "a" if g["fallen"] == 1 else "e", rname(r)])
+			fallen_pool += g["fallen"]
+			g["fallen"] = 0

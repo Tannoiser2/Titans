@@ -36,7 +36,7 @@ func _run(games: int, np: int, lvl: int, adv: bool) -> void:
 			seats[1]["name"] = "Automa"
 		var seed := int(OS.get_environment("TI_SEED") if OS.get_environment("TI_SEED") != "" else "100") + g
 		eng.setup({"seats": seats, "seed": seed, "scenario": scn["id"], "advanced": adv, "capital_capture": OS.get_environment("TI_CAP") == "1", "extended": OS.get_environment("TI_EXT") == "1", "solo": solo, "automa_adv": OS.get_environment("TI_SOLO") == "2",
-			"monuments": "m" in OS.get_environment("TI_XP"), "emissaries": "e" in OS.get_environment("TI_XP"), "fire": "f" in OS.get_environment("TI_XP")})
+			"monuments": "m" in OS.get_environment("TI_XP"), "emissaries": "e" in OS.get_environment("TI_XP"), "fire": "f" in OS.get_environment("TI_XP"), "echoes": "c" in OS.get_environment("TI_XP")})
 		var tseat := 0 if solo else g % np
 		var lvl0 := int(OS.get_environment("TI_LVL0")) if OS.get_environment("TI_LVL0") != "" else lvl
 		for i in np:
@@ -113,6 +113,9 @@ func _check(eng: TIEngine) -> void:
 		if eng.exp_fire and fires != (0 if eng.fire_free[s] else 1) and eng.battle.is_empty():
 			errors += 1
 			print("ERRORE: Artiglieria di Fuoco di %s: %d sul tabellone, libera %s (turno %d)" % [eng.pname(s), fires, eng.fire_free[s], eng.turn_no])
+			if OS.get_environment("TI_DBG") == "1":
+				for l in eng.log_lines.slice(-14):
+					print("    ", l)
 		if eng.exp_emi and not eng.emi[s].is_empty() and eng.battle.is_empty() and eng.phase in ["play", "draw", "reset"]:
 			var er: int = eng.emi[s]["r"]
 			if er >= 0 and (eng.reg[er]["own"] != s or eng.units_total(er) == 0):
@@ -129,6 +132,20 @@ func _check(eng: TIEngine) -> void:
 		if tb != (eng.titan[s] == "board") and eng.battle.is_empty():
 			errors += 1
 			print("ERRORE: Titano di %s: %s ma sul tabellone %d" % [eng.pname(s), eng.titan[s], k["T"]])
+	if eng.exp_echo:
+		var fk: int = eng.fallen_pool
+		for r in eng.regions:
+			fk += eng.reg[r]["fallen"]
+			if eng.reg[r]["fallen"] < 0:
+				errors += 1
+				print("ERRORE: Unità Cadute negative in ", eng.rname(r))
+		for b in eng.battles:
+			fk += int(b.get("fallen", 0))
+		if not eng.battle.is_empty():
+			fk += int(eng.battle["fal"].get(eng.battle["att"], 0))
+		if fk != TIData.FALLEN_TOTAL and (eng.battle.is_empty() or not eng.battle.has("outcome")):
+			errors += 1
+			print("ERRORE: %d Unità Cadute in tutto (turno %d, fase %s)" % [fk, eng.turn_no, eng.phase])
 	for r in eng.regions:
 		var g: Dictionary = eng.reg[r]
 		var tot := 0

@@ -170,9 +170,11 @@ static func primary(b: Button) -> Button:
 
 
 ## Dado disegnato: colore per tipo, pallini pari al valore (0 = faccia vuota).
-static func draw_die(ci: CanvasItem, rect: Rect2, t: String, v: int, selected := false, dim := false) -> void:
-	var bg: Color = {"F": Color("#e9dcc0"), "K": Color("#c79a5a"), "A": Color("#8f969e"), "T": Color("#7e1f1f")}[t]
-	var pip: Color = Color("#f6ecd6") if t == "T" else Color("#1d1712")
+static func draw_die(ci: CanvasItem, rect: Rect2, t: String, v: int, selected := false, dim := false, skull := false, zero := false) -> void:
+	var bg: Color = {"F": Color("#e9dcc0"), "K": Color("#c79a5a"), "A": Color("#8f969e"), "T": Color("#7e1f1f"), "C": Color("#5b3a8c")}[t]
+	var pip: Color = Color("#f6ecd6") if t in ["T", "C"] else Color("#1d1712")
+	if zero:
+		bg = bg.darkened(0.35)
 	if dim:
 		bg = bg.darkened(0.45)
 	var sb := StyleBoxFlat.new()
@@ -191,8 +193,19 @@ static func draw_die(ci: CanvasItem, rect: Rect2, t: String, v: int, selected :=
 		0: [], 1: [Vector2.ZERO], 2: [Vector2(-o, -o), Vector2(o, o)], 3: [Vector2(-o, -o), Vector2.ZERO, Vector2(o, o)],
 		4: [Vector2(-o, -o), Vector2(o, -o), Vector2(-o, o), Vector2(o, o)],
 	}
-	for p in pos.get(v, []):
-		ci.draw_circle(c + p, r, pip)
+	if t == "C" and skull:
+		# teschio in basso a destra: cranio, occhi e denti
+		var k := c + Vector2(s * 0.26, s * 0.26)
+		var kr := s * 0.13
+		ci.draw_circle(k, kr, Color("#f1e7d2"))
+		ci.draw_rect(Rect2(k + Vector2(-kr * 0.6, kr * 0.5), Vector2(kr * 1.2, kr * 0.7)), Color("#f1e7d2"))
+		ci.draw_circle(k + Vector2(-kr * 0.4, -kr * 0.05), kr * 0.28, bg)
+		ci.draw_circle(k + Vector2(kr * 0.4, -kr * 0.05), kr * 0.28, bg)
+		for p in pos.get(v, []):
+			ci.draw_circle(c + Vector2(-s * 0.14, -s * 0.14) + p * 0.75, r * 0.9, pip)
+	else:
+		for p in pos.get(v, []):
+			ci.draw_circle(c + p, r, pip)
 	# piccola sigla del tipo in alto a sinistra
 	init_fonts()
 	ci.draw_string(font_head_b, rect.position + Vector2(s * 0.08, s * 0.28), t, HORIZONTAL_ALIGNMENT_LEFT, -1, int(s * 0.2), Color(pip, 0.55))

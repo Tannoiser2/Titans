@@ -201,7 +201,12 @@ func _xp_b() -> String:
 	s += "Ogni Nazione ha un'Artiglieria di Fuoco nella riserva. Quando uno schieramento di Artiglieria o Fanteria crea in una Regione la coppia Artiglieria + Fanteria, puoi rimettere le due Unità nella riserva e schierare al loro posto l'Artiglieria di Fuoco.\n"
 	s += "• Per movimento, carte e abilità è 1 Unità di Artiglieria; in Battaglia tira 1 Dado Artiglieria e anche 1 Dado Fanteria.\n"
 	s += "• Se eliminata torna nella riserva e si può ricreare.\n\n"
+	s += _h("Echi del Passato")
+	s += "Ognuno sceglie una carta Unità Caduta (dall'ultimo giocatore, in senso antiorario) e mette 1 Unità Caduta in una sua Regione con Unità. Le Unità Cadute (12 in tutto) non si muovono né si schierano con gli Ordini: seguono gratis le Unità che muovi; se restano sole disertano.\n"
+	s += "• In Battaglia tirano 1 Dado Unità Caduta ciascuna (Forza 0, 1 o 2; alcune facce hanno il teschio). Dopo aver stabilito il vincitore si elimina 1 Unità Caduta per ogni teschio. Non si scelgono come perdite.\n"
+	s += "• Chi perde una Battaglia ottiene 1 Unità Caduta se soddisfa la condizione della sua carta; la carta ha anche un'abilità negativa che vale nelle Battaglie con le sue Unità Cadute.\n\n"
 	s += _h("Interpretazioni della versione digitale")
+	s += "• Unità Cadute: non contano per la dimensione dell'Armata né per il controllo delle Regioni. Ogni carta abbina la condizione e l'abilità negativa nell'ordine del regolamento.\n"
 	s += "• Il costo dei Monumenti è il numero romano della carta (I, II, III).\n"
 	s += "• Si costruisce al massimo 1 Monumento per turno. Castello Reale, San Basilio e Giannizzeri si attivano da soli, dopo le Battaglie o dopo la Fase D.\n"
 	s += "• Santa Sofia si perde se perdi la Regione su cui l'hai costruita.\n"
@@ -235,5 +240,5 @@ func _digital() -> String:
 	s += "• Le carte Supporto giocate in coppia o in tris sono scelte automaticamente fra quelle con il requisito soddisfatto.\n"
 	s += "• Il Bogatyr russo può far ritirare un dado qualsiasi della Battaglia, anche dell'avversario.\n"
 	s += "• Lo spazio fisico delle regioni non è limitato.\n"
-	s += "• Non sono incluse (per ora) Campi di Sangue, Echi del Passato, Spirito di Guerra e Potere dei Titani.\n"
+	s += "• Non sono incluse (per ora) Campi di Sangue, Spirito di Guerra e Potere dei Titani.\n"
 	return s

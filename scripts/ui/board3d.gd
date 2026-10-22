@@ -284,6 +284,24 @@ func _fire_model(nat: String) -> Node3D:
 	return n
 
 
+## Unità Caduta: una Fanteria spettrale, viola e semitrasparente.
+func _fallen_model(nat: String) -> Node3D:
+	var n := _model("F", nat, 0.78)
+	for c in n.get_children():
+		if c is MeshInstance3D:
+			if not mats.has("fallen"):
+				var m := StandardMaterial3D.new()
+				m.albedo_color = Color(0.55, 0.4, 0.85, 0.62)
+				m.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
+				m.emission_enabled = true
+				m.emission = Color("#6a3fb0")
+				m.emission_energy_multiplier = 0.3
+				m.roughness = 0.4
+				mats["fallen"] = m
+			(c as MeshInstance3D).material_override = mats["fallen"]
+	return n
+
+
 func _monument_token(nat: String, i: int) -> Node3D:
 	var n := Node3D.new()
 	var base := MeshInstance3D.new()
@@ -445,6 +463,16 @@ func _build_region(r: int) -> void:
 			fm.position = slots[si % slots.size()]
 			fm.rotation_degrees.y = 200 + si * 23
 			root.add_child(fm)
+			si += 1
+		if g.get("fallen", 0) > 0:
+			var gh := _fallen_model(nat)
+			gh.position = slots[si % slots.size()]
+			gh.rotation_degrees.y = 200 + si * 23
+			root.add_child(gh)
+			if g["fallen"] > 1:
+				var lbf := _count_label(g["fallen"], Color("#5b3a8c"))
+				lbf.position.y = 0.9
+				gh.add_child(lbf)
 			si += 1
 		if eng.exp_emi and not eng.emi[own].is_empty() and eng.emi[own]["r"] == r:
 			var es := _emi_sprite(eng.emi[own])
