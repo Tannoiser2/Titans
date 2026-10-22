@@ -2026,7 +2026,8 @@ func support_plays(s: int) -> Array:
 					ev = 2.1
 			if uses_ign:
 				lbl += " — con l'abilità del Titano"
-			var play := {"kind": kind, "n": k, "cards": cards, "label": lbl, "ign": uses_ign, "deck": deck, "ws": wsdie}
+			var pool: Array = ok_cards.duplicate() if not uses_ign else any_cards.duplicate()
+			var play := {"kind": kind, "n": k, "cards": cards, "label": lbl, "ign": uses_ign, "deck": deck, "ws": wsdie, "pool": pool, "okc": ok_cards.duplicate()}
 			if ev >= 0.0:
 				play["ev"] = ev
 			out.append(play)
@@ -2102,6 +2103,17 @@ func _battle_phase(s: int) -> void:
 				return
 			"sup":
 				var p: Dictionary = op["play"]
+				var pool: Array = p.get("pool", [])
+				if pool.size() > int(p["n"]):
+					# il giocatore sceglie quali carte giocare
+					var sel := await pick_cards(s, "sup_cards", "Scegli %d carte «%s» da giocare" % [p["n"], D.SUPPORT_NAME[p["kind"]]], pool, p["n"], p["n"])
+					var bad := 0
+					for c in sel:
+						if not (c in p["okc"]):
+							bad += 1
+					if sel.size() == int(p["n"]) and bad <= (1 if p["ign"] else 0):
+						p["cards"] = sel
+						p["ign"] = bad > 0
 				for c in p["cards"]:
 					discard_support(s, c)
 				battle["played"][s].append_array(p["cards"])

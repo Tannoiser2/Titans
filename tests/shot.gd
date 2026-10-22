@@ -90,7 +90,7 @@ func _run() -> void:
 			continue
 		var e: TIEngine = g.engine
 		var key := "%s_%s" % [req["type"], req.get("ctx", "")]
-		if not shots_taken.has(key) and key in ["pick_order", "region_move_to", "pick_battle", "cards_pay", "pick_buy_start", "pick_objective", "region_deploy", "pick_action", "pick_mon_build", "pick_emi_token", "pick_fire", "pick_mon_menu", "pick_echo_card", "pick_cos_action", "pick_cos_end", "pick_tp_choose"]:
+		if not shots_taken.has(key) and key in ["pick_order", "region_move_to", "pick_battle", "cards_pay", "pick_buy_start", "pick_objective", "region_deploy", "pick_action", "pick_mon_build", "pick_emi_token", "pick_fire", "pick_mon_menu", "pick_echo_card", "pick_cos_action", "pick_cos_end", "pick_tp_choose", "cards_sup_cards"]:
 			shots_taken[key] = true
 			await shot(key)
 		if mode == "xp5" and e.turn_no != last_turn:
