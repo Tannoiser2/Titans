@@ -999,6 +999,26 @@ func _pick(eng, s: int, req: Dictionary) -> int:
 			return 1 if opts.size() > 1 and int(req.get("under", 0)) >= 2 else 0
 		"mon_nc_pick":
 			return 0
+		"tp_choose":
+			var best := 0
+			var bv := -1e9
+			for i in opts.size():
+				var c: Dictionary = D.TITAN_POWERS[eng.nat(s)][opts[i]["tp"]]
+				var v := 0.0
+				for f in c["fx"]:
+					match f[0]:
+						"str": v += float(f[1])
+						"draw": v += 0.8 * f[1]
+						"discard": v -= 0.6 * f[1]
+						"keep": v += 0.9 * f[2]
+						"weak": v += 0.9 * f[1]
+						"foe_drop": v += 1.4 * f[1]
+						"max", "reroll": v += 1.0
+				v -= (0.6 if c["eq"] else 0.0) + 0.4 * (int(c["n"]) - 2)
+				if v > bv:
+					bv = v
+					best = i
+			return best
 		"cos_action":
 			var c := ai_cos_pick(eng, s, opts)
 			return c if c >= 0 else opts.size() - 1
@@ -1251,6 +1271,12 @@ func _dice(eng, s: int, req: Dictionary) -> Array:
 		var d: Dictionary = bt["dice"][it[0]][it[1]]
 		return float(d["v"]) - EDIE[d["t"]]
 	match ctx:
+		"drop_own":
+			var best := 0
+			for i in items.size():
+				if val.call(items[i]) < val.call(items[best]):
+					best = i
+			return [best]
 		"reroll":
 			var out := []
 			for i in items.size():
@@ -1307,6 +1333,8 @@ func _need(eng, s: int) -> int:
 func _battle(eng, s: int, opts: Array) -> int:
 	for i in opts.size():
 		if opts[i]["k"] == "mon_nc":
+			return i
+		if opts[i]["k"] == "tp":
 			return i
 		if opts[i]["k"] == "cos_reroll":
 			for d in eng.battle["dice"][s]:

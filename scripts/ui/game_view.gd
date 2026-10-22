@@ -307,11 +307,13 @@ func _player_panel(s: int) -> Control:
 
 ## Monumenti, Emissario del Re e Artiglieria di Fuoco di un giocatore.
 func _expansion_row(s: int) -> Control:
-	if not (engine.exp_mon or engine.exp_emi or engine.exp_fire or engine.exp_echo or engine.exp_cos):
+	if not (engine.exp_mon or engine.exp_emi or engine.exp_fire or engine.exp_echo or engine.exp_cos or engine.exp_tp):
 		return null
 	var nat := engine.nat(s)
-	var hb := HBoxContainer.new()
-	hb.add_theme_constant_override("separation", 4)
+	var hb := HFlowContainer.new()
+	hb.custom_minimum_size.x = 360
+	hb.add_theme_constant_override("h_separation", 4)
+	hb.add_theme_constant_override("v_separation", 2)
 	if engine.exp_mon:
 		for i in 3:
 			var m: Dictionary = engine.mon[s][i]
@@ -356,6 +358,17 @@ func _expansion_row(s: int) -> Control:
 			if ev is InputEventMouseButton and ev.pressed and ev.button_index == MOUSE_BUTTON_LEFT:
 				_zoom_card(ft, ftxt))
 		hb.add_child(fr)
+	if engine.exp_tp:
+		for ti in engine.tp_owned[s]:
+			var tt := UI.tex("res://assets/carte/tp_%s%d.jpg" % [nat, ti])
+			var tr2 := UI.icon_rect(tt, Vector2(24, 36))
+			tr2.mouse_filter = Control.MOUSE_FILTER_STOP
+			var ttxt: String = "Potere del Titano — " + D.titan_power_text(nat, ti)
+			tr2.tooltip_text = ttxt
+			tr2.gui_input.connect(func(ev):
+				if ev is InputEventMouseButton and ev.pressed and ev.button_index == MOUSE_BUTTON_LEFT:
+					_zoom_card(tt, ttxt))
+			hb.add_child(tr2)
 	if engine.exp_cos:
 		for c in engine.cos_up[s]:
 			var ct := UI.support_tex(c)
@@ -830,6 +843,17 @@ func _show_pick(req: Dictionary) -> void:
 			vbf.add_child(bf)
 			hbf.add_child(vbf)
 			flow.add_child(hbf)
+			continue
+		if o.has("tp") and o.has("nation"):
+			var hbt := HBoxContainer.new()
+			hbt.add_child(UI.icon_rect(UI.tex("res://assets/carte/tp_%s%d.jpg" % [o["nation"], o["tp"]]), Vector2(92, 138)))
+			var vbt := VBoxContainer.new()
+			vbt.add_child(UI.wrap(UI.label(o["label"], 15), 240))
+			var bt2 := UI.button("Tieni", 140, 36, 16)
+			bt2.pressed.connect(func(): _provide(idx))
+			vbt.add_child(bt2)
+			hbt.add_child(vbt)
+			flow.add_child(hbt)
 			continue
 		if o.has("emi"):
 			var be := UI.button(o["label"], 0, 56, 17)

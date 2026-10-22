@@ -19,7 +19,7 @@ var solo_me := ""               # Solitario: la nazione del giocatore (l'altra �
 var automa_lvl := 0             # 0 Base, 1 Avanzato
 var automa_row: Control
 var opt_rows: Array = []
-var xp := {"monuments": false, "emissaries": false, "fire": false, "echoes": false, "fields": false, "spirit": false}     # espansioni Kickstarter
+var xp := {"monuments": false, "emissaries": false, "fire": false, "echoes": false, "fields": false, "spirit": false, "titans": false}     # espansioni Kickstarter
 var msg: Label
 var scen_box: VBoxContainer
 var seats_box: VBoxContainer
@@ -166,7 +166,7 @@ func _ready() -> void:
 	var xl := UI.label("Espansioni", 22, Color.WHITE, UI.font_head_b)
 	xl.custom_minimum_size.x = 170
 	xrow.add_child(xl)
-	for kv in [["monuments", "Monumenti", "Ogni Nazione ha 3 Monumenti da costruire con le Carte Supporto"], ["emissaries", "Emissari", "3 Obiettivi Nazione segreti: il primo dà un Emissario che accompagna un'Armata, poi 3 e 5 PV"], ["fire", "Pioggia di Fuoco", "Un'Artiglieria di Fuoco per Nazione: conta come Artiglieria e tira anche 1 Dado Fanteria"], ["echoes", "Echi del Passato", "Unità Cadute che seguono le Armate e tirano i loro dadi in Battaglia; ognuno ha una carta con un'abilità negativa"], ["fields", "Campi di Sangue", "Cosacchi e il mazzo Supporto di Campi di Sangue, con Potenziamenti e Schieramenti dei Cosacchi"], ["spirit", "Spirito di Guerra", "Il mazzo Supporto di Spirito di Guerra con i suoi Dadi (con Campi di Sangue i due mazzi si mescolano e le carte scoperte sono 6)"]]:
+	for kv in [["monuments", "Monumenti", "Ogni Nazione ha 3 Monumenti da costruire con le Carte Supporto"], ["emissaries", "Emissari", "3 Obiettivi Nazione segreti: il primo dà un Emissario che accompagna un'Armata, poi 3 e 5 PV"], ["fire", "Pioggia di Fuoco", "Un'Artiglieria di Fuoco per Nazione: conta come Artiglieria e tira anche 1 Dado Fanteria"], ["echoes", "Echi del Passato", "Unità Cadute che seguono le Armate e tirano i loro dadi in Battaglia; ognuno ha una carta con un'abilità negativa"], ["fields", "Campi di Sangue", "Cosacchi e il mazzo Supporto di Campi di Sangue, con Potenziamenti e Schieramenti dei Cosacchi"], ["spirit", "Spirito di Guerra", "Il mazzo Supporto di Spirito di Guerra con i suoi Dadi (con Campi di Sangue i due mazzi si mescolano e le carte scoperte sono 6)"], ["titans", "Potere dei Titani", "Carte Potere del Titano da attivare con i dadi quando il Titano è in Battaglia; se ne guadagna una attaccando con il Titano"]]:
 		var cb := CheckBox.new()
 		cb.text = kv[1]
 		cb.tooltip_text = kv[2]
@@ -403,7 +403,7 @@ func _config() -> Dictionary:
 	if nplayers == 1:
 		return {"seats": seats, "scenario": scen_id, "ai_delay": speeds[speed], "solo": true, "automa_adv": automa_lvl == 1, "advanced": false, "capital_capture": false, "extended": false}
 	return {"seats": seats, "scenario": scen_id, "ai_delay": speeds[speed], "advanced": advanced, "capital_capture": capital_capture, "extended": extended,
-		"monuments": xp["monuments"], "emissaries": xp["emissaries"], "fire": xp["fire"], "echoes": xp["echoes"], "fields": xp["fields"], "spirit": xp["spirit"]}
+		"monuments": xp["monuments"], "emissaries": xp["emissaries"], "fire": xp["fire"], "echoes": xp["echoes"], "fields": xp["fields"], "spirit": xp["spirit"], "titans": xp["titans"]}
 
 
 func _on_start() -> void:

@@ -215,7 +215,11 @@ func _xp_b() -> String:
 	s += "• «Aggiungi Forza»: 1 carta +1 Forza; 2 o 3 carte 1 Dado Spirito di Guerra, e il simbolo vale +3 (2 carte) o +6 (3 carte).\n"
 	s += "• «Aggiungi un Dado»: 1 carta 1 Dado Fanteria; 2 carte 1 Dado Spirito di Guerra, e il simbolo attiva l'effetto di una delle due carte (muovere un'Unità di 1 o 2 Regioni nella Battaglia, aggiungere una Fanteria dalla riserva, ripristinare una Carta Nazione, portare al massimo gli altri dadi, +1 Forza per ogni dado dell'avversario o per ogni tuo dado).\n"
 	s += "• Un Dado Spirito di Guerra con il simbolo resta sulla carta e non si ritira più.\n\n"
+	s += _h("Potere dei Titani")
+	s += "Ognuno ha 5 Carte Potere del Titano della sua Nazione: in preparazione ne pesca 2 e ne tiene 1 (l'altra in fondo). Ogni volta che attacca con il Titano, a fine Battaglia ne pesca altre 2 e ne tiene 1.\n"
+	s += "• Se il Titano è in Battaglia si può attivare una carta (una sola per Battaglia) mettendoci sopra i Dadi richiesti: 2 o 3 Dadi diversi oppure uguali per tipo. I Dadi contano per la Forza ma non si ritirano più. L'effetto si risolve subito.\n\n"
 	s += _h("Interpretazioni della versione digitale")
+	s += "• Potere dei Titani: le carte restano e si possono riusare nelle Battaglie successive; i Dadi da mettere sulla carta sono scelti in automatico fra i più bassi.\n"
 	s += "• Campi di Sangue: il Dado Cosacco ha due facce vuote, due da 1 e due da 2 (dalle scansioni si vedono le facce con le sciabole).\n"
 	s += "• Unità Cadute: non contano per la dimensione dell'Armata né per il controllo delle Regioni.\n"
 	s += "• Il costo dei Monumenti è il numero romano della carta (I, II, III).\n"
@@ -251,5 +255,5 @@ func _digital() -> String:
 	s += "• Le carte Supporto giocate in coppia o in tris sono scelte automaticamente fra quelle con il requisito soddisfatto.\n"
 	s += "• Il Bogatyr russo può far ritirare un dado qualsiasi della Battaglia, anche dell'avversario.\n"
 	s += "• Lo spazio fisico delle regioni non è limitato.\n"
-	s += "• Non è incluso (per ora) Potere dei Titani.\n"
+
 	return s

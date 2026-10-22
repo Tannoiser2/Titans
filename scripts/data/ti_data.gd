@@ -578,6 +578,66 @@ static func monument(nat: String, i: int) -> Dictionary:
 	return MONUMENTS[nat][i]
 
 
+## Potere dei Titani: 5 carte per Nazione. n = Dadi da mettere sulla carta, eq = uguali (true) o diversi (false)
+## per tipo; fx = effetti in ordine; alt = si sceglie uno solo degli effetti.
+## fx: ["draw", N], ["discard", N], ["keep", pesca, tieni], ["weak", N] (Dado più debole disponibile),
+## ["foe_drop", N] (l'avversario scarta Dadi), ["max", 1], ["reroll", 1], ["str", N].
+const TITAN_POWERS := {
+	"pol": [
+		{"n": 2, "eq": false, "fx": [["draw", 2], ["discard", 2]]},
+		{"n": 2, "eq": true, "fx": [["foe_drop", 1]]},
+		{"n": 3, "eq": false, "fx": [["weak", 1], ["str", 1]]},
+		{"n": 3, "eq": true, "fx": [["max", 1], ["str", 2]]},
+		{"n": 3, "eq": false, "fx": [["draw", 2], ["str", 2]]},
+	],
+	"rus": [
+		{"n": 2, "eq": false, "fx": [["str", 1]]},
+		{"n": 2, "eq": true, "fx": [["keep", 2, 1]]},
+		{"n": 3, "eq": false, "fx": [["str", 2]]},
+		{"n": 3, "eq": true, "fx": [["str", 3]]},
+		{"n": 3, "eq": false, "fx": [["weak", 2]]},
+	],
+	"sve": [
+		{"n": 2, "eq": false, "fx": [["draw", 1], ["discard", 1]]},
+		{"n": 2, "eq": true, "fx": [["reroll", 1], ["str", 1]]},
+		{"n": 3, "eq": false, "fx": [["foe_drop", 1], ["weak", 1]], "alt": true},
+		{"n": 3, "eq": true, "fx": [["foe_drop", 1], ["weak", 1]]},
+		{"n": 3, "eq": false, "fx": [["draw", 1], ["str", 3]]},
+	],
+	"ott": [
+		{"n": 2, "eq": false, "fx": [["reroll", 1]]},
+		{"n": 2, "eq": true, "fx": [["weak", 1]]},
+		{"n": 3, "eq": false, "fx": [["keep", 3, 2]]},
+		{"n": 3, "eq": true, "fx": [["draw", 1], ["str", 2]]},
+		{"n": 3, "eq": false, "fx": [["foe_drop", 2]]},
+	],
+	"sri": [
+		{"n": 2, "eq": false, "fx": [["discard", 1], ["str", 2]]},
+		{"n": 2, "eq": true, "fx": [["max", 1]]},
+		{"n": 3, "eq": false, "fx": [["foe_drop", 1], ["str", 1]]},
+		{"n": 3, "eq": true, "fx": [["keep", 5, 2]]},
+		{"n": 3, "eq": false, "fx": [["discard", 1], ["str", 4]]},
+	],
+}
+
+
+static func titan_power_text(nat: String, i: int) -> String:
+	var c: Dictionary = TITAN_POWERS[nat][i]
+	var parts := []
+	for f in c["fx"]:
+		match f[0]:
+			"draw": parts.append("pesca %d Carta%s Supporto" % [f[1], "" if f[1] == 1 else "e"])
+			"discard": parts.append("scarta %d Carta%s Supporto" % [f[1], "" if f[1] == 1 else "e"])
+			"keep": parts.append("pesca %d Carte Supporto e tienine %d" % [f[1], f[2]])
+			"weak": parts.append(("aggiungi il Dado più debole disponibile" if f[1] == 1 else "aggiungi 2 volte il Dado più debole disponibile"))
+			"foe_drop": parts.append("l'avversario scarta %d Dad%s dalla sua riserva" % [f[1], "o" if f[1] == 1 else "i"])
+			"max": parts.append("porta 1 Dado al massimo")
+			"reroll": parts.append("ritira 1 Dado")
+			"str": parts.append("+%d Forza" % f[1])
+	var req := "%d Dadi %s" % [c["n"], "uguali" if c["eq"] else "diversi"]
+	return "%s: %s" % [req, (" oppure " if c.get("alt", false) else ", ").join(parts)]
+
+
 # ---------------------------------------------------------------- mappa e scenari
 
 static var _map := {}

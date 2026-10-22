@@ -128,6 +128,9 @@ var cos_turn := {}               # posto -> turno in cui ha usato l'Azione speci
 var q_stop := {}                 # regioni dove un Cosacco si è fermato in questo turno
 var exp_ws := false              # Spirito di Guerra (mazzo Supporto alternativo e Dadi Spirito di Guerra)
 var face_n := 4                  # Carte Supporto scoperte (6 se si mescolano due mazzi)
+var exp_tp := false              # Potere dei Titani
+var tp_owned: Array = []         # per posto: Carte Potere del Titano scoperte (indici 0..4)
+var tp_deck: Array = []          # per posto: mazzetto coperto
 
 
 # ================================================================ preparazione
@@ -153,6 +156,7 @@ func setup(config: Dictionary) -> void:
 	exp_echo = bool(config.get("echoes", false)) and not solo
 	exp_cos = bool(config.get("fields", false)) and not solo
 	exp_ws = bool(config.get("spirit", false)) and not solo
+	exp_tp = bool(config.get("titans", false)) and not solo
 	for s in config["seats"]:
 		if bool(s.get("automa", false)):
 			automa = players.size()
@@ -198,6 +202,8 @@ func setup(config: Dictionary) -> void:
 	fallen_card = []
 	fallen_pool = D.FALLEN_TOTAL
 	cos_up = []
+	tp_owned = []
+	tp_deck = []
 	cos_turn = {}
 	q_stop = {}
 	cossack_pool = D.COSSACK_TOTAL
@@ -214,6 +220,10 @@ func setup(config: Dictionary) -> void:
 		fire_free.append(exp_fire)
 		fallen_card.append(-1)
 		cos_up.append([])
+		tp_owned.append([])
+		var td := range(5)
+		_shuffle(td)
+		tp_deck.append(td)
 		reserve.append({"F": D.UNIT_COUNT["F"], "K": D.UNIT_COUNT["K"], "A": D.UNIT_COUNT["A"], "Q": 0})
 		titan.append("up")
 		vp.append(0)
@@ -732,6 +742,9 @@ func _initial_setup() -> void:
 		for o in p:
 			objdeck.append(o)
 	log_msg("Ogni giocatore ha scelto 3 Obiettivi Segreti.")
+	if exp_tp:
+		for i in n:
+			await _tp_draw((first + i) % n)
 	if exp_cos:
 		for i in n:
 			var sq := (first + i) % n
@@ -1420,7 +1433,7 @@ func _resolve_battle(b: Dictionary) -> void:
 		"sup_used": {att: 0, dfn: 0}, "sup_any": {att: false, dfn: false}, "ignore_req": {}, "size0": {},
 		"winner": -1, "diff": 0, "emi": {}, "mon_nc": {}, "cap_region": reg[r]["cap"] >= 0,
 		"fal": {att: int(b.get("fallen", 0)), dfn: int(reg[r]["fallen"])}, "fz": {}, "retreat_to": {},
-		"played": {att: [], dfn: []},
+		"played": {att: [], dfn: []}, "tp_used": {},
 	}
 	bt["fal0"] = bt["fal"].duplicate()
 	battle = bt
@@ -1509,6 +1522,8 @@ func _resolve_battle(b: Dictionary) -> void:
 		await _fallen_gain(bt, loser)
 	if exp_cos:
 		await _cos_after_battle(bt, winner)
+	if exp_tp and bt["had_titan"].get(att, false):
+		await _tp_draw(att)
 	stats[winner]["won"] += 1
 	stats[loser]["lost"] += 1
 	await _after_battle_cards(att)
@@ -2063,6 +2078,10 @@ func _battle_phase(s: int) -> void:
 				"sri":
 					if not hand[s].is_empty() and not sface.is_empty():
 						opts.append({"label": "Abilità del Titano: scarta 1 Carta Supporto e prendine 1 scoperta", "k": "titan"})
+		if exp_tp and has_titan(s) and not battle["tp_used"].has(s):
+			for ti in tp_owned[s]:
+				if not _tp_dice(s, ti).is_empty():
+					opts.append({"label": "Potere del Titano: " + D.titan_power_text(nat(s), ti), "k": "tp", "tp": ti})
 		if _cos_reroll_die(s) >= 0:
 			opts.append({"label": "Potenziamento dei Cosacchi: usa un Dado Cosacco da 1 per ritirare un altro tuo Dado", "k": "cos_reroll"})
 		if not _mon_nc_cards(s).is_empty():
@@ -2144,6 +2163,8 @@ func _battle_phase(s: int) -> void:
 						log_msg("Il Bogatyr di %s fa ritirare un Dado di %s: %d." % [pname(s), pname(it[0]), battle["dice"][it[0]][it[1]]["v"]])
 			"mon_nc":
 				await _mon_town_sri(s)
+			"tp":
+				await _tp_use(s, op["tp"])
 			"cos_reroll":
 				var qi := _cos_reroll_die(s)
 				battle["dice"][s][qi]["used"] = true
@@ -3947,4 +3968,133 @@ func _ws_resolve(s: int, i: int) -> void:
 			battle["bonus"][s] += (battle["dice"][o] as Array).size()
 		"own_dice":
 			battle["bonus"][s] += (battle["dice"][s] as Array).size()
+	changed.emit()
+
+
+# ---------------------------------------------------------------- Potere dei Titani
+
+## Si pescano le prime 2 Carte Potere del Titano, se ne tiene 1 e l'altra va in fondo.
+func _tp_draw(s: int) -> void:
+	var top: Array = tp_deck[s].slice(0, 2)
+	if top.is_empty():
+		return
+	var k := 0
+	if top.size() > 1:
+		var opts := []
+		for ti in top:
+			opts.append({"label": D.titan_power_text(nat(s), ti), "tp": ti, "nation": nat(s)})
+		k = await pick(s, "tp_choose", "Potere del Titano: quale carta tieni?", opts)
+	var keep: int = top[k]
+	tp_deck[s].erase(keep)
+	tp_owned[s].append(keep)
+	if top.size() > 1:
+		var other_c: int = top[1 - k]
+		tp_deck[s].erase(other_c)
+		tp_deck[s].append(other_c)
+	log_msg("%s ottiene una Carta Potere del Titano: %s" % [pname(s), D.titan_power_text(nat(s), keep)])
+	changed.emit()
+
+
+## Dadi della riserva che attivano la carta (i più bassi possibile), oppure [] se non si può.
+func _tp_dice(s: int, ti: int) -> Array:
+	var c: Dictionary = D.TITAN_POWERS[nat(s)][ti]
+	var need: int = c["n"]
+	var by_t := {}
+	var dice: Array = battle["dice"][s]
+	for i in dice.size():
+		var d: Dictionary = dice[i]
+		if d.get("used", false):
+			continue
+		if not by_t.has(d["t"]):
+			by_t[d["t"]] = []
+		by_t[d["t"]].append(i)
+	for t in by_t:
+		(by_t[t] as Array).sort_custom(func(a, b): return int(dice[a]["v"]) < int(dice[b]["v"]))
+	if c["eq"]:
+		var best := []
+		for t in by_t:
+			if (by_t[t] as Array).size() >= need:
+				var cand: Array = (by_t[t] as Array).slice(0, need)
+				if best.is_empty() or _dsum(s, cand) < _dsum(s, best):
+					best = cand
+		return best
+	if by_t.size() < need:
+		return []
+	var firsts := []
+	for t in by_t:
+		firsts.append(by_t[t][0])
+	firsts.sort_custom(func(a, b): return int(dice[a]["v"]) < int(dice[b]["v"]))
+	return firsts.slice(0, need)
+
+
+func _dsum(s: int, idx: Array) -> int:
+	var t := 0
+	for i in idx:
+		t += int(battle["dice"][s][i]["v"])
+	return t
+
+
+func _tp_use(s: int, ti: int) -> void:
+	var idx := _tp_dice(s, ti)
+	if idx.is_empty():
+		return
+	battle["tp_used"][s] = true
+	for i in idx:
+		battle["dice"][s][i]["used"] = true
+	var c: Dictionary = D.TITAN_POWERS[nat(s)][ti]
+	log_msg("%s attiva il Potere del Titano: %s" % [pname(s), D.titan_power_text(nat(s), ti)])
+	_fx("ncard", {"seat": s, "card": -1})
+	var fxs: Array = c["fx"]
+	if c.get("alt", false):
+		var opts := []
+		for f in fxs:
+			opts.append({"label": D.titan_power_text(nat(s), ti).split(": ")[1].split(" oppure ")[opts.size()], "fx": f})
+		fxs = [opts[await pick(s, "tp_or", "Potere del Titano: scegli l'effetto", opts, {"battle": true})]["fx"]]
+	var o := other(s)
+	for f in fxs:
+		match f[0]:
+			"draw":
+				draw_support(s, f[1])
+			"discard":
+				var dc := await pick_cards(s, "discard", "Potere del Titano: scarta %d Carta%s Supporto" % [f[1], "" if f[1] == 1 else "e"], hand[s].duplicate(), mini(f[1], hand[s].size()), f[1])
+				for cc in dc:
+					discard_support(s, cc)
+			"keep":
+				var drawn := []
+				for i in int(f[1]):
+					var cc := _deck_top()
+					if cc >= 0:
+						drawn.append(cc)
+				var kept := await pick_cards(s, "tp_keep", "Potere del Titano: quali %d carte tieni?" % f[2], drawn, mini(f[2], drawn.size()), f[2])
+				for cc in drawn:
+					if cc in kept:
+						hand[s].append(cc)
+					else:
+						sdiscard.append(cc)
+			"weak":
+				for i in int(f[1]):
+					for t in ["F", "K", "A", "T"]:
+						if can_roll(s, t):
+							_roll_die(s, t)
+							break
+			"foe_drop":
+				for i in int(f[1]):
+					var its := _dice_items(o, false)
+					if its.is_empty():
+						break
+					var sel := await pick_dice(o, "drop_own", "Potere del Titano avversario: scarta 1 tuo Dado", its, 1, 1)
+					for it in sel:
+						var d: Dictionary = battle["dice"][o][it[1]]
+						battle["dice"][o].remove_at(it[1])
+						log_msg("%s scarta un Dado %s (%d)." % [pname(o), D.UNIT_NAME.get(d["t"], d["t"]), d["v"]])
+			"max":
+				await _max_die(s)
+			"reroll":
+				var its := _dice_items(s)
+				if not its.is_empty():
+					var sel := await pick_dice(s, "reroll", "Potere del Titano: ritira 1 tuo Dado", its, 1, 1)
+					for it in sel:
+						_reroll(s, it[1])
+			"str":
+				battle["bonus"][s] += int(f[1])
 	changed.emit()

@@ -36,7 +36,7 @@ func _run(games: int, np: int, lvl: int, adv: bool) -> void:
 			seats[1]["name"] = "Automa"
 		var seed := int(OS.get_environment("TI_SEED") if OS.get_environment("TI_SEED") != "" else "100") + g
 		eng.setup({"seats": seats, "seed": seed, "scenario": scn["id"], "advanced": adv, "capital_capture": OS.get_environment("TI_CAP") == "1", "extended": OS.get_environment("TI_EXT") == "1", "solo": solo, "automa_adv": OS.get_environment("TI_SOLO") == "2",
-			"monuments": "m" in OS.get_environment("TI_XP"), "emissaries": "e" in OS.get_environment("TI_XP"), "fire": "f" in OS.get_environment("TI_XP"), "echoes": "c" in OS.get_environment("TI_XP"), "fields": "q" in OS.get_environment("TI_XP"), "spirit": "w" in OS.get_environment("TI_XP")})
+			"monuments": "m" in OS.get_environment("TI_XP"), "emissaries": "e" in OS.get_environment("TI_XP"), "fire": "f" in OS.get_environment("TI_XP"), "echoes": "c" in OS.get_environment("TI_XP"), "fields": "q" in OS.get_environment("TI_XP"), "spirit": "w" in OS.get_environment("TI_XP"), "titans": "t" in OS.get_environment("TI_XP")})
 		var tseat := 0 if solo else g % np
 		var lvl0 := int(OS.get_environment("TI_LVL0")) if OS.get_environment("TI_LVL0") != "" else lvl
 		for i in np:

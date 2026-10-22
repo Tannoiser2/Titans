@@ -34,6 +34,8 @@ copia fisica e dal modulo Tabletop Simulator.
     copia fisica), l'Azione speciale della Fase A, i 7 Potenziamenti e lo Schieramento dei Cosacchi.
   - **Spirito di Guerra**: il mazzo Supporto alternativo di 36 carte e i 6 Dadi Spirito di Guerra in comune, con
     il simbolo che vale +3/+6 o attiva i 6 effetti speciali; si può mescolare con Campi di Sangue (6 carte scoperte).
+  - **Potere dei Titani**: le 25 Carte Potere del Titano (5 per Nazione, scansioni della copia fisica), attivate
+    con 2 o 3 Dadi uguali o diversi quando il Titano è in Battaglia.
 - **IA** a tre livelli in qualunque combinazione con i giocatori umani; più umani sullo stesso dispositivo con la
   schermata «passa il dispositivo».
 - **Gioco online** su Firebase: ognuno dal suo dispositivo con un codice di 4 lettere.
@@ -78,7 +80,7 @@ dove ritirarsi e schierare.
   dimensione dell'Armata né per il controllo. Le 5 carte sono fotografate dalla copia fisica.
 - Campi di Sangue: Dado Cosacco 0, 0, 1, 1, 2, 2; con «Schiera 1 Unità» si può schierare un Cosacco.
 - Spirito di Guerra: Dado simbolo ×3, 2, 3, 4 (dalle scansioni).
-- Non è ancora incluso Potere dei Titani.
+- Potere dei Titani: le carte restano e si riusano; i Dadi da mettere sulla carta sono scelti fra i più bassi.
 
 ## Comandi
 Trascina con il tasto sinistro per ruotare la vista, con il destro per spostarla, rotella per lo zoom; «Vista»
@@ -114,7 +116,7 @@ tests/                        simulazioni, screenshot, prova online con finto Fi
 godot --headless --path . -s tests/sim.gd -- 10 3 1          # 10 partite fra IA, 3 giocatori, livello Normale
 godot --headless --path . -s tests/sim.gd -- 10 2 1 1        # …in Modalità Avanzata
 TI_SOLO=1 godot --headless --path . -s tests/sim.gd -- 10 2 1 # IA contro l'Automa Base (TI_SOLO=2 Avanzato)
-TI_XP=mefcqw godot --headless --path . -s tests/sim.gd -- 10 4 1 # con Monumenti, Emissari, Pioggia di Fuoco, Echi del Passato, Campi di Sangue e Spirito di Guerra
+TI_XP=mefcqwt godot --headless --path . -s tests/sim.gd -- 10 4 1 # con Monumenti, Emissari, Pioggia di Fuoco, Echi del Passato, Campi di Sangue, Spirito di Guerra e Potere dei Titani
 python3 tests/firebase_mock.py 8765 & …tests/online_play.gd  # due dispositivi online sul finto Firebase
 xvfb-run godot --path . -s res://tests/shot.gd -- game       # screenshot
 ```
